@@ -29,6 +29,11 @@
   #state{font-size:13px;color:var(--dim)}
   .err{color:#f28b82;font-size:14px;max-width:min(360px,86vw)}
   .hint{font-size:12px;color:#5f6368;max-width:min(340px,84vw)}
+  .gainwrap{display:none;width:min(320px,84vw)}
+  .gainwrap.on{display:block}
+  .gainrow{display:flex;justify-content:space-between;font-size:13px;color:var(--dim)}
+  #gain{width:100%;accent-color:var(--hot);margin-top:6px}
+  #gainval{font-variant-numeric:tabular-nums;color:var(--hot)}
 </style>
 </head>
 <body>
@@ -44,6 +49,13 @@
   <div id="ring"><div id="lvl">—</div></div>
   <div id="who"></div>
 
+  <div id="gainwrap" class="gainwrap">
+    <div class="gainrow"><span>My level</span><span id="gainval">1.0×</span></div>
+    <input id="gain" type="range" min="0.3" max="3" step="0.1" value="1">
+    <div class="hint" style="margin-top:4px">Turn up if the Mac says you are quiet.
+      Affects what everyone hears AND what gets transcribed.</div>
+  </div>
+
   <button id="go">Go live</button>
   <div id="state">not connected</div>
   <div id="err" class="err"></div>
@@ -54,7 +66,10 @@ const RATE  = 16000;
 
 const el = id => document.getElementById(id);
 const ui = {name:el("name"), go:el("go"), state:el("state"), err:el("err"),
-            ring:el("ring"), lvl:el("lvl"), who:el("who"), setup:el("setup")};
+            ring:el("ring"), lvl:el("lvl"), who:el("who"), setup:el("setup"),
+            gainwrap:el("gainwrap"), gain:el("gain"), gainval:el("gainval")};
+
+let gain = 1;
 
 let ws=null, ctx=null, node=null, stream=null, live=false, wake=null;
 let sent=0, holding=false;
@@ -124,6 +139,7 @@ async function start(){
       ui.go.textContent = "Stop"; ui.go.className = "live"; ui.go.disabled = false;
       ui.who.textContent = `${msg.label} · ${msg.id}`;
       say("live");
+      ui.gainwrap.classList.add("on");
       keepAwake();
       pump();
     }
@@ -146,7 +162,15 @@ async function pump(){
   node = new AudioWorkletNode(ctx, "pcm16");
   node.port.onmessage = (e) => {
     if (!ws || ws.readyState !== 1) return;
-    const pcm = e.data;
+    let pcm = e.data;
+    if (gain !== 1) {
+      // scale here rather than in the worklet: one multiply on 320 samples is
+      // nothing, and it keeps the worklet free of state that has to be synced
+      for (let i = 0; i < pcm.length; i++) {
+        const v = pcm[i] * gain;
+        pcm[i] = v > 32767 ? 32767 : v < -32768 ? -32768 : v;
+      }
+    }
     ws.send(pcm.buffer);
     sent++;
     if ((sent & 3) === 0) meter(pcm);      // 12 Hz is plenty for a level ring
@@ -176,12 +200,17 @@ function stop(){
   try { ws && ws.close(); } catch {}
   try { wake && wake.release(); } catch {}
   ws = ctx = node = stream = wake = null;
+  ui.gainwrap.classList.remove("on");
   ui.setup.style.display = ""; ui.go.textContent = "Go live";
   ui.go.className = ""; ui.go.disabled = false;
   ui.ring.className = ""; ui.lvl.textContent = "—"; ui.who.textContent = "";
   say("not connected");
 }
 
+ui.gain.oninput = () => {
+  gain = +ui.gain.value;
+  ui.gainval.textContent = `${gain.toFixed(1)}×`;
+};
 ui.go.onclick = () => (live ? stop() : start());
 ui.name.addEventListener("keydown", e => { if (e.key === "Enter") start(); });
 addEventListener("pagehide", stop);

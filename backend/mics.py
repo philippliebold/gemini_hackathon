@@ -59,6 +59,7 @@ class Mic:
     last_rms: float = 0.0
     last_voice: float = 0.0
     stolen: int = 0          # times this mic took the floor
+    gain: float = 1.0        # audible level in the room; never affects transcription
 
     @property
     def talking(self) -> bool:
@@ -220,7 +221,7 @@ class Floor:
     def roster(self) -> list[dict]:
         return [{"id": m.id, "label": m.label, "holding": self.holder == m.id,
                  "talking": m.talking, "frames": m.frames,
-                 "rms": round(m.last_rms, 4)}
+                 "rms": round(m.last_rms, 4), "gain": m.gain}
                 for m in sorted(self.mics.values(), key=lambda x: x.joined)]
 
     def summary(self) -> str:

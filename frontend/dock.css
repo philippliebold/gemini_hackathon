@@ -326,3 +326,12 @@ body.stopped::after {
   color: #FFC9C4; font: 500 12px/1 "Google Sans", Roboto, sans-serif;
   letter-spacing: .1em; text-transform: uppercase; pointer-events: none;
 }
+
+
+/* the PA is live — loud visually, because a hot speaker can feed back */
+#spk-btn.on { background: rgba(251,188,4,.24); color: #FFE7A3; }
+#spk-btn.on .msym { color: #FDD663; font-variation-settings: "FILL" 1; }
+#spk-label { font-variant-numeric: tabular-nums; }
+
+/* per-phone room volume, inline on the chip */
+.mic-chip .mic-vol { width: 54px; accent-color: #7FB0FF; margin: 0 2px; cursor: pointer; }

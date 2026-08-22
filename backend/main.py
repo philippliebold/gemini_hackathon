@@ -26,6 +26,7 @@ import mic_server
 import mics
 import ops
 import server
+import speaker as speaker_mod
 import tools
 from config import CFG
 
@@ -140,9 +141,11 @@ async def main(args):
     # The screen drives the mics: it needs the join code, the roster, and this
     # machine's real input devices.
     macmic = audio.MacMic(q, floor)
+    spk = speaker_mod.Speaker()
     server.CONTROL.update({
         "floor": floor, "macmic": macmic, "max_mics": mics.MAX_MICS,
         "devices": audio.input_devices, "brain": brain, "memory": mem,
+        "speaker": spk, "macmic_obj": macmic,
         "join_url": f"https://{mic_server.lan_ip()}:{CFG.mic_port}/",
     })
     server.CONTROL["qr_svg"] = qr_svg(server.CONTROL["join_url"])
@@ -191,7 +194,8 @@ async def main(args):
         tasks += [mic_server.serve_mics(
                       floor,
                       lambda pcm: audio.offer(q, ("audio", pcm)),
-                      lambda kind, value: audio.offer(q, (kind, value)))]
+                      lambda kind, value: audio.offer(q, (kind, value)),
+                      spk.feed)]
 
     await asyncio.gather(*tasks)
 

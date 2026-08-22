@@ -56,6 +56,8 @@ def mics_payload() -> dict:
         "gate": mics.GATE_RMS,
         "ear": CONTROL.get("ear", "live"),
         "listening": runtime.listening(),
+        "speaker": (CONTROL["speaker"].state()
+                    if CONTROL.get("speaker") is not None else None),
         "notes": (CONTROL["memory"].summary
                   if CONTROL.get("memory") is not None else None),
         "brain": {"enabled": bool(brain and brain.enabled),
@@ -95,6 +97,15 @@ async def handler(ws):
     finally:
         CLIENTS.discard(ws)
         print(f"[ws] client gone ({len(CLIENTS)} left)")
+
+
+def _silence_mac_mic(why: str) -> None:
+    """Feedback protection: the Mac mic cannot be open while the Mac is playing the
+    phone into the room."""
+    mac = CONTROL.get("macmic")
+    if mac is not None and getattr(mac, "active", False):
+        mac.off()
+        print(f"[spk] Mac mic switched off — {why}")
 
 
 async def on_presenter(action: str | None) -> None:
@@ -154,6 +165,42 @@ async def on_presenter(action: str | None) -> None:
             print("[said] no brain attached; run with --brain")
             return
         brain.feed(line)
+    elif action and action.startswith("mic_gain:"):
+        # mic_gain:<mic_id>:<0..3>
+        try:
+            _, mic_id, val = action.split(":", 2)
+            g = float(val)
+        except ValueError:
+            return
+        spk = CONTROL.get("speaker")
+        floor = CONTROL.get("floor")
+        if spk is not None:
+            spk.set_gain(mic_id, g)
+        if floor is not None and mic_id in floor.mics:
+            floor.mics[mic_id].gain = max(0.0, min(3.0, g))
+        push_mics()
+    elif action and action.startswith("speaker_device:"):
+        spk = CONTROL.get("speaker")
+        if spk is not None:
+            try:
+                dev = int(action.split(":", 1)[1])
+            except ValueError:
+                return
+            _silence_mac_mic("switching the PA output")
+            spk.start(dev)
+            push_mics()
+    elif action in ("speaker_on", "speaker_off"):
+        spk = CONTROL.get("speaker")
+        if spk is None:
+            return
+        if action == "speaker_on":
+            # Playing the phone through the speakers while the Mac mic is open is a
+            # feedback loop. Close it rather than let the room howl.
+            _silence_mac_mic("playing phone audio out loud")
+            spk.start(spk.device)
+        else:
+            spk.stop()
+        push_mics()
     elif action in ("listen_on", "listen_off"):
         runtime.set_listening(action == "listen_on")
         broadcast(ops.status("listening" if runtime.listening() else "idle"))

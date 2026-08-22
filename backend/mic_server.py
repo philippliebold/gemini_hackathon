@@ -95,7 +95,8 @@ def print_join_banner(url: str) -> None:
 
 
 async def serve_mics(floor: mics.Floor, on_audio: Callable[[bytes], None],
-                     on_event: Callable[[str, str], None]) -> None:
+                     on_event: Callable[[str, str], None],
+                     on_raw: Callable[[bytes, str], None] | None = None) -> None:
     """Run the mic ingest server until cancelled. Never raises into the demo."""
     ip = lan_ip()
     if not ensure_cert(ip):
@@ -134,6 +135,10 @@ async def serve_mics(floor: mics.Floor, on_audio: Callable[[bytes], None],
             async for frame in ws:
                 if not isinstance(frame, bytes):
                     continue            # only the handshake is text
+                # Raw tap BEFORE the gate: the audible path must not be chopped
+                # by a noise gate meant for the model. See speaker.py.
+                if on_raw is not None:
+                    on_raw(frame, mic.id)
                 forward, events = floor.accept(mic.id, frame)
                 for kind, value in events:      # boundaries before their audio
                     on_event(kind, value)

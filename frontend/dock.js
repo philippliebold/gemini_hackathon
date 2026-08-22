@@ -44,7 +44,11 @@ const dock = {
   reset:  document.getElementById("reset-btn"),
   listen: document.getElementById("listen-btn"),
   listenL: document.getElementById("listen-label"),
+  spk:    document.getElementById("spk-btn"),
+  spkL:   document.getElementById("spk-label"),
 };
+
+let spkState = { active: false, device: null, devices: [] };
 
 let listening = true;
 
@@ -102,6 +106,7 @@ function onMics(p) {
   if (p.gate !== undefined) renderGate(p.gate);
   if (p.notes) onNotes(p.notes);
   if (p.listening !== undefined) renderListen(p.listening);
+  if (p.speaker) renderSpeaker(p.speaker);
   renderRoster();
 }
 
@@ -118,6 +123,49 @@ function renderListen(on) {
     ? "Stop listening — halts transcription and all API calls (L)"
     : "Start listening (L)";
   document.body.classList.toggle("stopped", !listening);
+}
+
+/* The PA. The label carries the live buffer depth because that IS the latency you
+   are hearing — if it climbs, the network is behind, not the audio path. */
+function renderSpeaker(st) {
+  spkState = st;
+  if (!dock.spk) return;
+  dock.spk.classList.toggle("on", st.active);
+  dock.spk.querySelector(".msym").textContent = st.active ? "volume_up" : "volume_off";
+  if (dock.spkL) {
+    const name = (st.devices.find((d) => d.index === st.device) || {}).name || "Output";
+    dock.spkL.textContent = st.active
+      ? `${name.split(" ").slice(0, 2).join(" ")} · ${st.buffered_ms}ms`
+      : "Speaker";
+  }
+  dock.spk.title = st.active
+    ? "Playing out loud — click to stop, right-click to pick an output"
+    : "Play the phones through this Mac's output — right-click to pick an output (S)";
+}
+
+function pickOutput() {
+  const devs = spkState.devices || [];
+  dock.list.innerHTML = devs.length
+    ? devs.map((d) => `
+        <button class="picker-item" data-i="${d.index}">
+          <span class="msym">${d.index === spkState.device && spkState.active
+            ? "check_circle" : "speaker"}</span>
+          <span>${String(d.name).replace(/[<>&]/g, "")}${d.default ? " · default" : ""}</span>
+        </button>`).join("")
+    : `<div style="color:#5F6368;font-size:14px;padding:8px 4px">No outputs found.</div>`;
+  dock.picker.classList.add("on");
+  poke();
+  dock.list.onclick = (e) => {
+    const b = e.target.closest(".picker-item");
+    if (!b) return;
+    window.sendPresenter(`speaker_device:${b.dataset.i}`);
+    closeP();
+  };
+  dock.cancel.onclick = closeP;
+  function closeP() {
+    dock.picker.classList.remove("on");
+    dock.list.onclick = dock.cancel.onclick = null;
+  }
 }
 
 const esc = (t) => String(t == null ? "" : t).replace(/[<>&]/g, "");
@@ -179,8 +227,17 @@ function renderRoster() {
       <span class="swatch"></span>
       <span class="mic-name">Microphone ${i + 1}</span>
       <span class="level"><i style="width:${Math.min(100, Math.round((m.rms || 0) * 900))}%"></i></span>
+      <input class="mic-vol" type="range" min="0" max="2" step="0.05"
+             value="${m.gain == null ? 1 : m.gain}" data-mic="${m.id}"
+             title="How loud this phone is in the room — does not affect transcription">
       <span class="msym">${m.holding ? "graphic_eq" : "mic"}</span>
     </div>`).join("");
+
+  /* Room volume per phone. Deliberately does NOT touch the transcription path:
+     turning someone down so the PA behaves must not make the model deaf to them. */
+  dock.row.querySelectorAll(".mic-vol").forEach((el) => {
+    el.onchange = () => window.sendPresenter(`mic_gain:${el.dataset.mic}:${el.value}`);
+  });
 
   const n = r.length;
   dock.add.disabled = n >= MAX_MICS;
@@ -315,7 +372,18 @@ addEventListener("keydown", (e) => {
   if (e.key.toLowerCase() === "l" && !e.metaKey && !e.ctrlKey && dock.listen)
     dock.listen.click();
 });
-window.CoDock = { onMics, onNotes, renderListen };
+if (dock.spk) {
+  dock.spk.onclick = () => {
+    window.sendPresenter(spkState.active ? "speaker_off" : "speaker_on");
+    poke();
+  };
+  dock.spk.oncontextmenu = (e) => { e.preventDefault(); pickOutput(); };
+}
+addEventListener("keydown", (e) => {
+  if (e.key.toLowerCase() === "s" && !e.metaKey && !e.ctrlKey && dock.spk)
+    dock.spk.click();
+});
+window.CoDock = { onMics, onNotes, renderListen, renderSpeaker };
 dock.clear.onclick = () => { window.CoStage.clearAll(); window.sendPresenter("clear"); };
 
 
