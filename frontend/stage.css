@@ -145,7 +145,11 @@ html, body {
   font-family: var(--font-display);
   font-weight: 400;
   font-size: clamp(38px, 6.2vw, 132px);
-  line-height: .98; letter-spacing: -.028em;
+  /* was .98 — a line-height under 1 clips descenders (the g in "going" lost its
+     tail) because the line box is shorter than the glyph. 1.06 plus a little
+     padding gives them room without loosening the look. */
+  line-height: 1.06; letter-spacing: -.028em;
+  padding-bottom: .06em;
   color: #EAF2FF;
 }
 .t-hero.tight { font-size: clamp(30px, 4.2vw, 84px); }
@@ -174,7 +178,10 @@ html, body {
    background-clip:text can no longer paint it: the word inherits the
    transparent fill and has no background of its own, so it vanishes.
    Each word therefore carries the gradient itself. */
-.w { display: inline-block; animation: word-in .8s var(--ease-out) both; }
+/* padding-bottom so a descender is not sliced off by the span's own box —
+   background-clip:text paints only inside it */
+.w { display: inline-block; padding-bottom: .06em;
+     animation: word-in .8s var(--ease-out) both; }
 .t-hero .w    { background-image: var(--grad-hero); }
 .sum-title .w { background-image: var(--grad-hero); }
 .t-num  .w    { background-image: var(--grad-num); }
@@ -208,6 +215,7 @@ html, body {
 .t-emoji {
   font-size: clamp(52px, 8.5vw, 160px); line-height: 1;
   margin-bottom: 2.2vh;
+  flex: none;
   filter: drop-shadow(0 14px 40px rgba(0,0,0,.45));
   animation: emoji-in 1.1s var(--ease-out) both;
 }
@@ -425,3 +433,13 @@ body.clean #hud, body.clean #dock, body.clean .cam-wrap { opacity: 0; pointer-ev
   }
   #sky b { animation: none !important; }
 }
+
+
+/* An emoji and a headline together were taller than the scene, and .scene clips
+   overflow — so the last line of text lost its bottom. When they share a scene the
+   emoji gives up some size; the words matter more than the decoration. */
+.scene:has(.t-emoji) .t-emoji { font-size: clamp(38px, 5.4vw, 96px); margin-bottom: 1.4vh; }
+.scene:has(.t-emoji) .t-hero  { font-size: clamp(32px, 4.6vw, 96px); }
+.scene:has(.t-emoji) .t-num   { font-size: clamp(48px, 8vw, 150px); }
+/* last resort: never clip text, even if the scene runs out of room */
+.t-hero, .t-num, .t-sub, .sum-title { overflow-wrap: break-word; min-width: 0; }

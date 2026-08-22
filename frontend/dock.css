@@ -335,3 +335,25 @@ body.stopped::after {
 
 /* per-phone room volume, inline on the chip */
 .mic-chip .mic-vol { width: 54px; accent-color: #7FB0FF; margin: 0 2px; cursor: pointer; }
+
+
+/* ---------- controls panel ---------- */
+.help-card { min-width: 520px; max-width: 600px; }
+.help-grid {
+  display: grid; grid-template-columns: 34px 1fr; gap: 11px 14px;
+  align-items: start; margin-bottom: 16px;
+}
+.help-grid kbd {
+  font: 600 12px/28px "Roboto Mono", ui-monospace, monospace;
+  text-align: center; height: 28px; border-radius: 8px;
+  background: rgba(255,255,255,.10); color: #BBD7FF;
+  border: 1px solid rgba(255,255,255,.14);
+}
+.help-grid div { font-size: 14px; color: #EAF2FF; line-height: 1.4; }
+.help-grid div b { font-weight: 500; }
+.help-grid div span { display: block; color: #9FB7D8; font-size: 12.5px; margin-top: 2px; }
+.help-note {
+  font-size: 12.5px; color: #9FB7D8; line-height: 1.55;
+  padding-top: 13px; border-top: 1px solid rgba(255,255,255,.12);
+}
+.help-note b { color: #C9DAF5; font-weight: 500; }

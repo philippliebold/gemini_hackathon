@@ -28,6 +28,11 @@
   #who{font-size:13px;color:var(--dim);min-height:1.3em}
   #state{font-size:13px;color:var(--dim)}
   .err{color:#f28b82;font-size:14px;max-width:min(360px,86vw)}
+  .leave{display:none;background:transparent;color:var(--dim);font-size:14px;
+         font-weight:500;padding:10px 18px;min-width:0}
+  .leave.on{display:block}
+  button.muted{background:#3c1f1f;color:#f28b82}
+  #ring.muted{border-color:#f28b82;box-shadow:none}
   .hint{font-size:12px;color:#5f6368;max-width:min(340px,84vw)}
   .gainwrap{display:none;width:min(320px,84vw)}
   .gainwrap.on{display:block}
@@ -57,6 +62,7 @@
   </div>
 
   <button id="go">Go live</button>
+  <button id="leave" class="leave">Leave session</button>
   <div id="state">not connected</div>
   <div id="err" class="err"></div>
 
@@ -72,7 +78,7 @@ const ui = {name:el("name"), go:el("go"), state:el("state"), err:el("err"),
 let gain = 1;
 
 let ws=null, ctx=null, node=null, stream=null, live=false, wake=null;
-let sent=0, holding=false;
+let sent=0, holding=false, muted=false;
 
 // The worklet does the whole hot path: resample to 16 kHz, pack to int16, hand
 // over one 20 ms frame at a time. Kept on the audio thread so a busy UI cannot
@@ -136,7 +142,9 @@ async function start(){
     if (msg.ok){
       live = true;
       ui.setup.style.display = "none";
-      ui.go.textContent = "Stop"; ui.go.className = "live"; ui.go.disabled = false;
+      setMuted(false);
+      ui.go.disabled = false;
+      el("leave").classList.add("on");
       ui.who.textContent = `${msg.label} · ${msg.id}`;
       say("live");
       ui.gainwrap.classList.add("on");
@@ -161,7 +169,7 @@ async function pump(){
     URL.createObjectURL(new Blob([WORKLET], {type:"application/javascript"})));
   node = new AudioWorkletNode(ctx, "pcm16");
   node.port.onmessage = (e) => {
-    if (!ws || ws.readyState !== 1) return;
+    if (!ws || ws.readyState !== 1 || muted) return;
     let pcm = e.data;
     if (gain !== 1) {
       // scale here rather than in the worklet: one multiply on 320 samples is
@@ -192,8 +200,20 @@ async function keepAwake(){
   try { wake = await navigator.wakeLock.request("screen"); } catch {}
 }
 
+/* Mute keeps the session: the Mac still shows you connected, you just stop being
+   heard. Leaving is separate and deliberate — someone tapping the big button
+   mid-talk means "stop hearing me", not "drop me from the room". */
+function setMuted(on){
+  muted = on;
+  ui.go.textContent = on ? "Unmute" : "Mute";
+  ui.go.className = on ? "muted" : "live";
+  ui.ring.classList.toggle("muted", on);
+  say(on ? "muted" : (holding ? "you have the floor" : "live"));
+  if (ws && ws.readyState === 1) ws.send(JSON.stringify({muted: on}));
+}
+
 function stop(){
-  live = false; holding = false;
+  live = false; holding = false; muted = false;
   try { node && node.disconnect(); } catch {}
   try { ctx && ctx.close(); } catch {}
   try { stream && stream.getTracks().forEach(t => t.stop()); } catch {}
@@ -203,6 +223,7 @@ function stop(){
   ui.gainwrap.classList.remove("on");
   ui.setup.style.display = ""; ui.go.textContent = "Go live";
   ui.go.className = ""; ui.go.disabled = false;
+  el("leave").classList.remove("on");
   ui.ring.className = ""; ui.lvl.textContent = "—"; ui.who.textContent = "";
   say("not connected");
 }
@@ -211,7 +232,8 @@ ui.gain.oninput = () => {
   gain = +ui.gain.value;
   ui.gainval.textContent = `${gain.toFixed(1)}×`;
 };
-ui.go.onclick = () => (live ? stop() : start());
+ui.go.onclick = () => (live ? setMuted(!muted) : start());
+el("leave").onclick = stop;
 ui.name.addEventListener("keydown", e => { if (e.key === "Enter") start(); });
 addEventListener("pagehide", stop);
 </script>

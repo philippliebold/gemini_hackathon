@@ -60,6 +60,7 @@ class Mic:
     last_voice: float = 0.0
     stolen: int = 0          # times this mic took the floor
     gain: float = 1.0        # audible level in the room; never affects transcription
+    muted: bool = False      # set by the phone; nothing it sends is used
 
     @property
     def talking(self) -> bool:
@@ -158,6 +159,16 @@ class Floor:
         mic = self.mics.get(mic_id)
         if mic is None:
             return False, []
+        if mic.muted:
+            # Muted means muted: not forwarded, not levelled, and it gives up the
+            # floor so a muted phone cannot sit on the stream.
+            mic.last_rms = 0.0
+            if self.holder == mic_id:
+                self.holder = None
+                if self.turn_open:
+                    self.turn_open = False
+                    return False, [("activity", "end")]
+            return False, []
 
         now = time.time()
         level = rms_of(pcm)
@@ -221,7 +232,7 @@ class Floor:
     def roster(self) -> list[dict]:
         return [{"id": m.id, "label": m.label, "holding": self.holder == m.id,
                  "talking": m.talking, "frames": m.frames,
-                 "rms": round(m.last_rms, 4), "gain": m.gain}
+                 "rms": round(m.last_rms, 4), "gain": m.gain, "muted": m.muted}
                 for m in sorted(self.mics.values(), key=lambda x: x.joined)]
 
     def summary(self) -> str:

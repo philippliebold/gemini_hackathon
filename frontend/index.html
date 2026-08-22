@@ -85,6 +85,9 @@
             title="Clear the board AND the running record — start the talk over">
       <span class="msym">restart_alt</span>
     </button>
+    <button id="help-btn" class="dock-btn ghost" title="Controls (?)">
+      <span class="msym">help</span>
+    </button>
     <button id="brain-btn" class="dock-btn ghost"
             title="Let gemini-3.7-flash decide what to draw, instead of the live ear">
       <span class="msym">neurology</span>
@@ -108,6 +111,33 @@
   </button>
 
   <div id="cam-wrap" class="cam-wrap"><video id="cam" autoplay muted playsinline></video></div>
+
+  <div id="help" class="picker"><div class="picker-card help-card">
+    <div class="picker-title">Controls</div>
+    <div class="help-grid">
+      <kbd>L</kbd><div><b>Listen / Stop</b><span>Stop halts transcription and every
+        API call. Nothing bills while stopped.</span></div>
+      <kbd>S</kbd><div><b>Speaker</b><span>Play the phones through this Mac's output.
+        Right-click the button to pick which output.</span></div>
+      <kbd>M</kbd><div><b>Mac input</b><span>Choose this Mac's microphone, or turn it
+        off.</span></div>
+      <kbd>N</kbd><div><b>Notes</b><span>The running record — topics, numbers,
+        decisions, open questions.</span></div>
+      <kbd>C</kbd><div><b>Clear</b><span>Wipe the screen. Keeps the record.</span></div>
+      <kbd>H</kbd><div><b>Hide chrome</b><span>Strip the dock and status. What the
+        room should see.</span></div>
+      <kbd>F</kbd><div><b>Fullscreen</b></div>
+      <kbd>?</kbd><div><b>This panel</b></div>
+    </div>
+    <div class="help-note">
+      <b>Phone</b> — open the QR panel, scan, accept the certificate warning once,
+      then Go live. Up to four. Each phone has its own volume in the room (the slider
+      on its chip) and its own input level (on the phone).<br><br>
+      <b>Reset</b> clears the board <i>and</i> the record — use it between rehearsals
+      so a fresh take is genuinely fresh.
+    </div>
+    <button id="help-close" class="picker-cancel">Done</button>
+  </div></div>
 
   <div id="notes" class="picker"><div class="picker-card notes-card">
     <div class="notes-head">

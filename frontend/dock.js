@@ -46,6 +46,9 @@ const dock = {
   listenL: document.getElementById("listen-label"),
   spk:    document.getElementById("spk-btn"),
   spkL:   document.getElementById("spk-label"),
+  help:   document.getElementById("help"),
+  helpBtn: document.getElementById("help-btn"),
+  helpClose: document.getElementById("help-close"),
 };
 
 let spkState = { active: false, device: null, devices: [] };
@@ -221,16 +224,17 @@ function renderRoster() {
      machine, and tells the room nothing; the colour and the number are what
      tie a chip to the speaker on the canvas. Real device name is the tooltip. */
   dock.row.innerHTML = r.map((m, i) => `
-    <div class="mic-chip mic-${(i % 4) + 1}${m.holding ? " speaking" : ""}"
+    <div class="mic-chip mic-${(i % 4) + 1}${m.holding ? " speaking" : ""}${m.muted ? " muted" : ""}"
          title="${String(m.label).replace(/[<>&"]/g, "")}${
-           m.holding ? " — live, audio is reaching the model" : " — connected"}">
+           m.muted ? " — muted on the phone"
+           : m.holding ? " — live, audio is reaching the model" : " — connected"}">
       <span class="swatch"></span>
       <span class="mic-name">Microphone ${i + 1}</span>
       <span class="level"><i style="width:${Math.min(100, Math.round((m.rms || 0) * 900))}%"></i></span>
       <input class="mic-vol" type="range" min="0" max="2" step="0.05"
              value="${m.gain == null ? 1 : m.gain}" data-mic="${m.id}"
              title="How loud this phone is in the room — does not affect transcription">
-      <span class="msym">${m.holding ? "graphic_eq" : "mic"}</span>
+      <span class="msym">${m.muted ? "mic_off" : m.holding ? "graphic_eq" : "mic"}</span>
     </div>`).join("");
 
   /* Room volume per phone. Deliberately does NOT touch the transcription path:
@@ -383,7 +387,21 @@ addEventListener("keydown", (e) => {
   if (e.key.toLowerCase() === "s" && !e.metaKey && !e.ctrlKey && dock.spk)
     dock.spk.click();
 });
-window.CoDock = { onMics, onNotes, renderListen, renderSpeaker };
+/* Controls panel. Every shortcut here has a real button too — the keys are a
+   shortcut, never the only way in. */
+function toggleHelp(on) {
+  if (!dock.help) return;
+  dock.help.classList.toggle("on", on === undefined
+    ? !dock.help.classList.contains("on") : on);
+  poke();
+}
+if (dock.helpBtn) dock.helpBtn.onclick = () => toggleHelp();
+if (dock.helpClose) dock.helpClose.onclick = () => toggleHelp(false);
+addEventListener("keydown", (e) => {
+  if (e.key === "?" || (e.key === "/" && e.shiftKey)) toggleHelp();
+  if (e.key === "Escape") toggleHelp(false);
+});
+window.CoDock = { onMics, onNotes, renderListen, renderSpeaker, toggleHelp };
 dock.clear.onclick = () => { window.CoStage.clearAll(); window.sendPresenter("clear"); };
 
 

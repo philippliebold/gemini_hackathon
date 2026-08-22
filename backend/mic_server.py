@@ -134,7 +134,17 @@ async def serve_mics(floor: mics.Floor, on_audio: Callable[[bytes], None],
         try:
             async for frame in ws:
                 if not isinstance(frame, bytes):
-                    continue            # only the handshake is text
+                    # Control messages from the phone after the handshake.
+                    try:
+                        msg = json.loads(frame)
+                    except (json.JSONDecodeError, TypeError):
+                        continue
+                    if "muted" in msg:
+                        mic.muted = bool(msg["muted"])
+                        print(f"[mic] {mic.label} "
+                              f"{'muted' if mic.muted else 'unmuted'}")
+                        await announce_floor()
+                    continue
                 # Raw tap BEFORE the gate: the audible path must not be chopped
                 # by a noise gate meant for the model. See speaker.py.
                 if on_raw is not None:
