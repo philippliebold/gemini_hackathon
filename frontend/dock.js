@@ -1,5 +1,5 @@
 /* ---------- control dock ----------
- * Up to four microphones and a camera, driven from the screen.
+ * Up to four microphones, driven from the screen.
  *
  * The mic chips are NOT local capture. They mirror the backend's floor: who is
  * connected, who currently owns the audio stream, and how loud they are. That is
@@ -10,17 +10,13 @@
  * switch it mid-session. Phones join over the QR panel.
  */
 let MAX_MICS = 4;
-let camStream = null;
 let micState = { roster: [], devices: [], mac: { active: false, device: null } };
 
 const dock = {
   root:   document.getElementById("dock"),
   row:    document.getElementById("mic-row"),
   add:    document.getElementById("add-mic"),
-  cam:    document.getElementById("cam-btn"),
   clear:  document.getElementById("clear-btn"),
-  wrap:   document.getElementById("cam-wrap"),
-  video:  document.getElementById("cam"),
   picker: document.getElementById("picker"),
   list:   document.getElementById("picker-list"),
   cancel: document.getElementById("picker-cancel"),
@@ -120,11 +116,14 @@ function renderListen(on) {
   if (!dock.listen) return;
   dock.listen.classList.toggle("on", listening);
   dock.listen.classList.toggle("off", !listening);
-  dock.listen.querySelector(".msym").textContent = listening ? "graphic_eq" : "mic_off";
-  if (dock.listenL) dock.listenL.textContent = listening ? "Listening" : "Stopped";
+  /* The glyph is the ACTION, the way a media control works: running shows
+     pause, stopped shows play. The label says the same thing in a word, so it
+     reads as a kill switch from across the room and not as a status light. */
+  dock.listen.querySelector(".msym").textContent = listening ? "pause" : "play_arrow";
+  if (dock.listenL) dock.listenL.textContent = listening ? "Stop" : "Start";
   dock.listen.title = listening
-    ? "Stop listening — halts transcription and all API calls (L)"
-    : "Start listening (L)";
+    ? "Stop — halts transcription and every API call (L)"
+    : "Start listening again (L)";
   document.body.classList.toggle("stopped", !listening);
 }
 
@@ -171,7 +170,11 @@ function pickOutput() {
   }
 }
 
-const esc = (t) => String(t == null ? "" : t).replace(/[<>&]/g, "");
+/* Named `strip`, not `esc`: stage.js already declares a top-level `esc`, and
+   both files load as classic scripts into ONE global lexical scope — a second
+   `const esc` is a SyntaxError that stops this whole file from parsing, which
+   silently kills every dock button. */
+const strip = (t) => String(t == null ? "" : t).replace(/[<>&]/g, "");
 
 /* The record is the artifact that survives the talk. Sections rather than a blob so
    a glance finds the thing you are looking for. */
@@ -191,11 +194,11 @@ function onNotes(sm) {
 
   dock.nBody.innerHTML =
     section("lightbulb", "Topics", has("topics")
-      ? notes.topics.map((t) => `<b>${esc(t.key)}</b> ${esc(t.gist)}`) : []) +
+      ? notes.topics.map((t) => `<b>${strip(t.key)}</b> ${strip(t.gist)}`) : []) +
     section("numbers", "Numbers", has("numbers")
-      ? notes.numbers.map((n) => `<b>${esc(n.value)}</b> ${esc(n.of)}`) : []) +
-    section("task_alt", "Decided", has("decisions") ? notes.decisions.map(esc) : []) +
-    section("help", "Open questions", has("questions") ? notes.questions.map(esc) : []);
+      ? notes.numbers.map((n) => `<b>${strip(n.value)}</b> ${strip(n.of)}`) : []) +
+    section("task_alt", "Decided", has("decisions") ? notes.decisions.map(strip) : []) +
+    section("help", "Open questions", has("questions") ? notes.questions.map(strip) : []);
 
   const n = ["topics", "numbers", "decisions", "questions"]
     .reduce((a, k) => a + (has(k) ? notes[k].length : 0), 0);
@@ -296,34 +299,9 @@ function togglePhone(on) {
   poke();
 }
 
-/* --- camera ----------------------------------------------------------- */
-async function toggleCam() {
-  if (camStream) {
-    camStream.getTracks().forEach((t) => t.stop());
-    camStream = null;
-    dock.video.srcObject = null;
-    dock.wrap.classList.remove("on");
-    dock.cam.classList.remove("on");
-    dock.cam.querySelector(".msym").textContent = "videocam_off";
-    window.sendPresenter("camera_off");
-  } else {
-    try {
-      camStream = await navigator.mediaDevices.getUserMedia({
-        video: { width: { ideal: 1280 } }, audio: false });
-    } catch (e) { return; }
-    dock.video.srcObject = camStream;
-    dock.wrap.classList.add("on");
-    dock.cam.classList.add("on");
-    dock.cam.querySelector(".msym").textContent = "videocam";
-    window.sendPresenter("camera_on");
-  }
-  poke();
-}
-
 dock.add.onclick   = pickMacDevice;
 dock.phone.onclick = () => togglePhone(!dock.panel.classList.contains("on"));
 dock.pclose.onclick = () => togglePhone(false);
-dock.cam.onclick   = toggleCam;
 addEventListener("keydown", (e) => {
   if (e.key === "Escape") togglePhone(false);
   if (e.key.toLowerCase() === "m" && !e.metaKey && !e.ctrlKey) pickMacDevice();

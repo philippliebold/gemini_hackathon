@@ -3,48 +3,136 @@
   "$id": "https://copresenter.local/schema/v1",
   "title": "Co-Presenter canvas op v1",
   "type": "object",
-  "required": ["v", "seq", "ts", "op", "payload"],
+  "required": [
+    "v",
+    "seq",
+    "ts",
+    "op",
+    "payload"
+  ],
   "properties": {
-    "v": { "const": 1 },
-    "seq": { "type": "integer", "minimum": 1 },
-    "ts": { "type": "number" },
-    "op": {
-      "enum": ["block.add", "block.update", "block.remove",
-               "link.add", "link.remove",
-               "canvas.focus", "canvas.clear", "status"]
+    "v": {
+      "const": 1
     },
-    "payload": { "type": "object" }
+    "seq": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "ts": {
+      "type": "number"
+    },
+    "op": {
+      "enum": [
+        "block.add",
+        "block.update",
+        "block.remove",
+        "link.add",
+        "link.remove",
+        "canvas.focus",
+        "canvas.clear",
+        "status",
+        "mics.state",
+        "notes.state"
+      ]
+    },
+    "payload": {
+      "type": "object"
+    }
   },
   "allOf": [
     {
-      "if": { "properties": { "op": { "const": "block.add" } } },
+      "if": {
+        "properties": {
+          "op": {
+            "const": "block.add"
+          }
+        }
+      },
       "then": {
         "properties": {
           "payload": {
-            "required": ["id", "type", "x", "y", "data"],
+            "required": [
+              "id",
+              "type",
+              "x",
+              "y",
+              "data"
+            ],
             "properties": {
-              "id": { "type": "string", "pattern": "^b_" },
-              "type": { "enum": ["text", "stat", "diagram", "chart", "table", "image", "map", "code", "hero", "math"] },
-              "x": { "type": "number" },
-              "y": { "type": "number" },
-              "w": { "type": "number" },
-              "h": { "type": "number" },
-              "enter": { "enum": ["pop", "fade", "draw"] },
-              "data": { "type": "object" }
+              "id": {
+                "type": "string",
+                "pattern": "^b_"
+              },
+              "type": {
+                "enum": [
+                  "text",
+                  "stat",
+                  "diagram",
+                  "chart",
+                  "table",
+                  "image",
+                  "map",
+                  "code",
+                  "hero",
+                  "math",
+                  "summary",
+                  "term"
+                ]
+              },
+              "x": {
+                "type": "number"
+              },
+              "y": {
+                "type": "number"
+              },
+              "w": {
+                "type": "number"
+              },
+              "h": {
+                "type": "number"
+              },
+              "enter": {
+                "enum": [
+                  "pop",
+                  "fade",
+                  "draw"
+                ]
+              },
+              "data": {
+                "type": "object"
+              }
             }
           }
         }
       }
     },
     {
-      "if": { "properties": { "op": { "const": "status" } } },
+      "if": {
+        "properties": {
+          "op": {
+            "const": "status"
+          }
+        }
+      },
       "then": {
         "properties": {
           "payload": {
-            "required": ["state"],
+            "required": [
+              "state"
+            ],
             "properties": {
-              "state": { "enum": ["idle", "listening", "thinking", "drawing", "error"] },
-              "transcript": { "type": "string" }
+              "state": {
+                "enum": [
+                  "idle",
+                  "listening",
+                  "thinking",
+                  "drawing",
+                  "error"
+                ]
+              },
+              "transcript": {
+                "type": "string"
+              }
             }
           }
         }

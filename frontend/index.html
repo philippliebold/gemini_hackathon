@@ -58,6 +58,14 @@
   </div>
 
   <div id="dock" class="dock">
+    <!-- The stop switch comes first because it is the control you reach for
+         under pressure: it halts transcription and every API call at once.
+         Play/pause semantics — the glyph is the action, not the state. -->
+    <button id="listen-btn" class="dock-btn listen"
+            title="Stop — halts transcription and every API call (L)">
+      <span class="msym">pause</span><span id="listen-label">Stop</span>
+    </button>
+    <div class="dock-sep"></div>
     <div class="dock-row" id="mic-row"></div>
     <div class="dock-sep"></div>
     <button id="add-mic" class="dock-btn" title="Add a microphone (up to 4)">
@@ -69,13 +77,6 @@
     </button>
     <button id="phone-btn" class="dock-btn" title="Join a phone as a microphone">
       <span class="msym">qr_code_2</span><span>Phone</span>
-    </button>
-    <button id="listen-btn" class="dock-btn"
-            title="Transcribe in this browser (no mic setup needed)">
-      <span class="msym">record_voice_over</span><span>Listen</span>
-    </button>
-    <button id="cam-btn" class="dock-btn" title="Toggle camera">
-      <span class="msym">videocam_off</span><span>Camera</span>
     </button>
     <div class="dock-sep"></div>
     <button id="notes-btn" class="dock-btn" title="The running record of this talk (N)">
@@ -110,13 +111,12 @@
     <span class="msym">expand_less</span><span>Controls</span>
   </button>
 
-  <div id="cam-wrap" class="cam-wrap"><video id="cam" autoplay muted playsinline></video></div>
-
   <div id="help" class="picker"><div class="picker-card help-card">
     <div class="picker-title">Controls</div>
     <div class="help-grid">
-      <kbd>L</kbd><div><b>Listen / Stop</b><span>Stop halts transcription and every
-        API call. Nothing bills while stopped.</span></div>
+      <kbd>L</kbd><div><b>Stop / Start</b><span>The kill switch, first button in the
+        dock. Stop halts transcription and every API call, and cancels any already in
+        flight. Nothing bills while stopped.</span></div>
       <kbd>S</kbd><div><b>Speaker</b><span>Play the phones through this Mac's output.
         Right-click the button to pick which output.</span></div>
       <kbd>M</kbd><div><b>Mac input</b><span>Choose this Mac's microphone, or turn it

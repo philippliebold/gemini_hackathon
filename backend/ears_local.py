@@ -16,6 +16,7 @@ The audio never leaves the machine, the transcript is free, and gemini-3.7-flash
 left doing the part it is actually good at.
 """
 import asyncio
+import re
 import time
 from collections.abc import Callable
 
@@ -36,12 +37,46 @@ INTERIM_EVERY_S = 0.9    # re-transcribe the live utterance this often, for the 
 FINAL_GAP_S = float(os.getenv("EAR_GAP", "0.45"))
 # Hard cap on how long a visual can be held back by someone who does not pause.
 MAX_UTTERANCE_S = float(os.getenv("EAR_MAX", "7.0"))
-MIN_UTTERANCE_S = 0.45   # shorter than this is a cough
+# Measured in this room: every utterance under 1 s came back as garbage or an
+# outright invention ("é"; "Thank you." eight times from 0.7 s of hum). Whisper
+# needs roughly a second of real speech to have any context to work with, so a
+# shorter clip is not a short sentence — it is a shard, and transcribing it costs
+# accuracy everywhere downstream.
+MIN_UTTERANCE_S = float(os.getenv("EAR_MIN", "1.2"))
 # Whisper punctuates. If the interim transcript has already closed a sentence, send
 # it now rather than waiting for the speaker to stop — you should be able to keep
 # talking and still have the last thought land.
 SEND_ON_SENTENCE = os.getenv("EAR_SENTENCE", "1").lower() in ("1", "true", "yes")
-SENTENCE_MIN_WORDS = 4
+# Whisper puts a full stop after two words constantly, so a low bar here cut
+# mid-thought: "So now everything is over." was three separate utterances.
+SENTENCE_MIN_WORDS = int(os.getenv("EAR_SENTENCE_WORDS", "8"))
+
+
+# Whisper does not fail quietly on near-silence: it invents, and always the same
+# two ways. Either a stock phrase out of its subtitle training data, or one phrase
+# looped. Both were on screen during the last run, so both get dropped here rather
+# than becoming a card the room reads.
+_ARTEFACTS = {
+    "thank you", "thanks for watching", "thank you for watching",
+    "thanks for listening", "please subscribe", "subscribe to my channel",
+    "bye", "bye bye", "see ya", "you", "okay", "oh", "hmm", "so", "yeah",
+    "stand by", "the end", "music", "applause",
+}
+
+
+def _invented(text: str) -> bool:
+    """True when a transcript is an artefact of silence rather than speech."""
+    t = (text or "").strip()
+    words = t.lower().strip(" .,!?-").split()
+    if not words:
+        return True
+    if " ".join(words) in _ARTEFACTS:
+        return True
+    # One phrase on a loop: "Thank you. Thank you. Thank you. ..."
+    parts = [x.strip().lower() for x in re.split(r"[.!?]+", t) if x.strip()]
+    if len(parts) >= 3 and len(set(parts)) == 1:
+        return True
+    return False
 
 
 class LocalEar:
@@ -128,6 +163,9 @@ class LocalEar:
                     continue
                 if not text:
                     continue
+                if _invented(text):
+                    print(f"[ear] {secs:.1f}s dropped (invented) -> {text[:60]!r}")
+                    continue
                 self.utterances += 1
                 print(f"[ear] {secs:.1f}s -> {text[:90]!r}")
                 self.broadcast(ops.status("listening", text))
@@ -151,7 +189,8 @@ class LocalEar:
                 self.broadcast(ops.status("listening", text))
 
                 if SEND_ON_SENTENCE and text.rstrip()[-1:] in ".!?" \
-                        and len(text.split()) >= SENTENCE_MIN_WORDS:
+                        and len(text.split()) >= SENTENCE_MIN_WORDS \
+                        and not _invented(text):
                     # A closed sentence: hand it over and start a fresh buffer. The
                     # speaker does not have to pause to be heard.
                     self._reset()

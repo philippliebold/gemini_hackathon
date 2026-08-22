@@ -336,7 +336,7 @@ html, body {
                        50%     { transform: translateY(-7px) scale(1.1) } }
 .core-dots.muted i { animation: none; opacity: .22; filter: grayscale(1) }
 
-body.clean #hud, body.clean #dock, body.clean .cam-wrap { opacity: 0; pointer-events: none; }
+body.clean #hud, body.clean #dock { opacity: 0; pointer-events: none; }
 
 /* ── Empty state ────────────────────────────────────────────────────── */
 #idle {

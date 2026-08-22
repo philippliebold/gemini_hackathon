@@ -1,6 +1,6 @@
 """A brain that needs no LLM at all.
 
-When the Gemini account is capped, transcription still works (the browser does
+When the Gemini account is capped, transcription still works (local Whisper does
 it for free) but nothing reaches the screen, which looks exactly like a broken
 product. This picks scenes straight from the transcript with plain pattern
 matching, so a talk still draws.
@@ -10,7 +10,7 @@ memory of the argument, no taste about form. It is a floor, not a replacement.
 The tools it drives are real: Wikimedia photo search and Google Maps routes
 need no Gemini quota, so those scenes are genuinely live.
 
-    python backend/main.py --local-brain
+    python backend/main.py --no-llm
 """
 import asyncio
 import re

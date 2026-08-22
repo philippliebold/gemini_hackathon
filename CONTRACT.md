@@ -163,13 +163,100 @@ on a simple SVG. `duration`/`distance` always render as an overlay chip.
 
 ---
 
+## Added after the freeze (announced, and already on the wire)
+
+Everything above is v1 as frozen at kickoff. These were added during the build,
+they are live in `backend/ops.py` and rendered by `frontend/stage.js`, and they are
+recorded here so the contract stops lagging the code. Same envelope, same rules.
+
+### `hero` — an emoji and 2-5 words. The DEFAULT block type
+```json
+{ "emoji": "🚀", "title": "No slides needed", "sub": "1937 · 2,737 m", "big": true }
+```
+`big` marks the single most important idea on screen. This is the workhorse: it
+reads from the back of a room where a paragraph does not.
+
+### `math` — a typeset formula
+```json
+{ "tex": "y = \\frac{wx^2}{2H}", "title": "Cable curve", "note": "under 8 words" }
+```
+`tex` is LaTeX **without** delimiters. Frontend renders with KaTeX; on a parse
+failure it shows the raw source rather than blanking.
+
+### `summary` — the closing recap, every point on one screen
+```json
+{ "title": "In summary",
+  "items": [ { "emoji": "⚡", "value": "1.4s", "label": "sentence to pixels" } ] }
+```
+4-12 tiles, `value` and `emoji` both optional. Tiles stagger in so the room
+watches it assemble.
+
+### `term` — a defined term, in brackets
+```json
+{ "term": "co-presenter", "sub": "it draws while you talk" }
+```
+Renderer exists; no tool emits it yet.
+
+---
+
+## Chrome ops (added after the freeze)
+
+Both are **chrome, never a block**. The frontend renders them in the dock and
+never on the canvas. A client that ignores them loses nothing but convenience.
+
+### `mics.state`
+```json
+{ "join_url": "https://10.0.0.5:8766/", "qr_svg": "<svg .../>", "max_mics": 4,
+  "roster": [{ "id": "m_1", "label": "Yufei", "holding": true, "talking": true,
+               "rms": 0.03, "gain": 1.0, "muted": false }],
+  "devices": [{ "index": 1, "name": "MacBook Pro Microphone", "default": true }],
+  "mac": { "active": true, "device": 1 },
+  "gate": 0.014, "ear": "local", "listening": true,
+  "speaker": { "active": false, "device": null, "buffered_ms": 0, "devices": [] },
+  "brain": { "enabled": true, "model": "gemini-3.7-flash" } }
+```
+Lets the screen show the phone-join code, who holds the floor, and whether the
+mic is live — so the room can set itself up without anyone reading a terminal.
+`ear` is `"local"` or `"live"`.
+
+### `notes.state`
+```json
+{ "thread": "what is being discussed right now",
+  "topics": [{ "key": "pricing", "gist": "under 12 words" }],
+  "numbers": [{ "value": "41k", "of": "monthly burn" }],
+  "decisions": ["ship the mic-first version"],
+  "questions": ["do we need the camera at all"] }
+```
+The running record — the thing that remains after the talking stops.
+
+---
+
 ## Client → Server (the only upstream message)
 
 ```json
 { "v": 1, "cmd": "presenter", "action": "clear" }
 ```
-`action` — `"clear" | "undo" | "pause" | "resume"`. Bound to keyboard shortcuts on
-the display. Backend may ignore these on day one; frontend should still send them.
+
+The frozen set was `"clear" | "undo" | "pause" | "resume"`. `clear` and `undo` are
+implemented; **`pause` and `resume` never were** — `listen_off` / `listen_on` below
+do that job instead. The display grew real controls during the build, so the full
+set the backend answers today (`server.on_presenter`) is:
+
+| Action | Does |
+|---|---|
+| `clear` | Wipe the board. Resets `canvas.py` too, so the model is not told about blocks the room can no longer see |
+| `undo` | Remove the most recently touched block |
+| `listen_off` / `listen_on` | **The kill switch.** Halts transcription, the brain and the summariser, and cancels calls already in flight. Nothing bills while stopped |
+| `context_reset` | `clear` plus the running record and the brain's recent lines — a genuinely fresh rehearsal |
+| `mic_device:<index>` / `mic_off` | Open or close this Mac's input |
+| `mic_gate:<float>` | Move the speech gate while the talk runs |
+| `mic_gain:<mic_id>:<0..3>` | How loud one phone is **in the room**. Never touches the transcription path |
+| `speaker_on` / `speaker_off` / `speaker_device:<index>` | Play the phones through this Mac's output. Turning it on closes the Mac mic, because that pair is a feedback loop |
+| `brain_on` / `brain_off` | Hand the drawing decision to `gemini-3.7-flash`. Refused while the ear is local, since nothing else could draw |
+| `mics_refresh` | Ask for a fresh `mics.state` |
+
+Unknown actions are ignored, so a frontend may send anything and an older backend
+simply will not act on it.
 
 ---
 

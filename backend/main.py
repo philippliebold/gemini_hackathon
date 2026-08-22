@@ -159,15 +159,11 @@ async def main(args):
         await brain.set_enabled(True)
         tasks = [server.serve(), mem.loop(), loop_watchdog(), brain.loop(),
                  local.loop(), local_pump(q, local, brain)]
-    elif args.no_llm:
-        # No Live session at all -- it would only reconnect-loop against a
-        # quota error. Transcripts arrive over the presenter channel (`said:`)
-        # from the browser's own speech recognition.
-        server.CONTROL["ear"] = "browser"
-        await brain.set_enabled(True)
-        tasks = [server.serve(), mem.loop(), loop_watchdog(), brain.loop()]
-        print("[main] no-LLM mode: browser transcribes, local brain draws")
     else:
+        # --live --no-llm is a valid pair: the Live API is the ear and LocalBrain
+        # draws from its transcripts, so the screen keeps working on zero Gemini
+        # text quota. gemini_live refuses the ear's own tool calls whenever a
+        # brain is enabled, so only one of them ever draws.
         server.CONTROL["ear"] = "live"
         tasks = [server.serve(), ear(), mem.loop(), loop_watchdog(), brain.loop()]
         if args.brain:
