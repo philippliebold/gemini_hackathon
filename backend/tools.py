@@ -170,6 +170,39 @@ def _decl(name: str, description: str, props: dict, required: list[str]) -> dict
 
 DECLARATIONS: list[dict[str, Any]] = [
     _decl(
+        "show_photo",
+        "Show a REAL photograph of a real, nameable thing -- a specific car, building, "
+        "animal, landmark, product. Use this INSTEAD of show_image whenever the thing "
+        "actually exists and the speaker named it. 'a Porsche 911 Turbo S' -> show_photo. "
+        "'a cosy imaginary cabin' -> show_image.",
+        {"query": {"type": "string",
+                   "description": "Search terms, e.g. 'Porsche 911 Turbo S'"}},
+        ["query"],
+    ),
+    _decl(
+        "show_summary",
+        "The closing recap: every important point of the session on ONE screen. Call "
+        "this ONLY when the speaker signals the end -- 'to sum up', 'in summary', "
+        "'so that's it', 'to wrap up'. Draw 4-9 items from what was ACTUALLY said "
+        "earlier in the talk; never invent a point that was not made.",
+        {
+            "title": {"type": "string", "description": "e.g. 'In summary'"},
+            "items": {
+                "type": "array",
+                "description": "4-9 recap tiles, most important first",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "emoji": {"type": "string", "description": "one emoji"},
+                        "value": {"type": "string", "description": "optional figure"},
+                        "label": {"type": "string", "description": "under 5 words"},
+                    },
+                },
+            },
+        },
+        ["items"],
+    ),
+    _decl(
         "show_hero",
         "The DEFAULT way to put an idea on screen. One emoji plus 2-5 words. Use this "
         "instead of show_concept whenever the point fits in a few words -- it reads from "
@@ -457,6 +490,74 @@ def tool_show_math(key: str, tex: str | None = None, title: str | None = None,
                    note: str | None = None, revises: str | None = None, **_):
     return _emit("math", key, {"tex": tex, "title": title, "note": note}, revises,
                  needs=("tex",), w=420, h=180, enter="fade")
+
+
+async def _find_photo(block_id: str, query: str) -> None:
+    """Real photo of a real thing, from Wikimedia Commons.
+
+    Generation invents a plausible Porsche; search returns *the* Porsche. It is
+    also the licensing-safe choice for a public repo -- Commons media is freely
+    licensed, unlike scraped image results.
+    """
+    if not BROADCAST:
+        return
+    try:
+        import re
+
+        import httpx
+        params = {
+            "action": "query", "generator": "search",
+            "gsrsearch": query, "gsrnamespace": 6, "gsrlimit": 6,
+            "prop": "imageinfo", "iiprop": "url|extmetadata",
+            "iiurlwidth": 1600, "format": "json",
+        }
+        async with httpx.AsyncClient(timeout=8) as client:
+            r = await client.get("https://commons.wikimedia.org/w/api.php",
+                                 params=params,
+                                 headers={"User-Agent": "CoPresenter/1.0 (hackathon)"})
+            pages = ((r.json().get("query") or {}).get("pages") or {}).values()
+
+        for pg in sorted(pages, key=lambda x: x.get("index", 99)):
+            info = (pg.get("imageinfo") or [{}])[0]
+            thumb = info.get("thumburl") or ""
+            if not thumb.lower().split("?")[0].endswith((".jpg", ".jpeg", ".png")):
+                continue
+            meta = info.get("extmetadata") or {}
+            artist = re.sub(r"<[^>]+>", "",
+                            (meta.get("Artist", {}).get("value") or "")).strip()
+            lic = meta.get("LicenseShortName", {}).get("value") or ""
+            credit = " · ".join(x for x in (artist[:60], lic, "Wikimedia Commons") if x)
+            BROADCAST(ops.block_update(block_id, {"src": thumb, "caption": credit}))
+            return
+
+        BROADCAST(ops.block_update(block_id, {"caption": f"no photo found: {query}"}))
+    except Exception as exc:                       # never kill the session
+        print(f"[photo] {type(exc).__name__}: {exc}")
+
+
+def tool_show_photo(key: str, query: str | None = None, caption: str | None = None,
+                    revises: str | None = None, **_):
+    frames, result = _emit("image", key,
+                           {"src": None, "caption": caption or "searching…",
+                            "alt": query}, revises,
+                           needs=("alt",), w=520, h=380, enter="fade")
+    if query:
+        try:
+            asyncio.get_running_loop().create_task(
+                _find_photo(result["block_id"], query))
+        except RuntimeError:
+            pass
+    return frames, result | {"status": "searching"}
+
+
+def tool_show_summary(key: str = "summary", title: str | None = None,
+                      items: list | None = None, revises: str | None = None, **_):
+    clean = [{"emoji": it.get("emoji"), "value": it.get("value"),
+              "label": it.get("label")}
+             for it in (items or [])[:12]
+             if isinstance(it, dict) and (it.get("label") or it.get("value"))]
+    return _emit("summary", key, {"title": title or "In summary", "items": clean},
+                 revises, needs=("items",), w=1200, h=620, enter="fade")
 
 
 def dispatch(name: str, args: dict) -> tuple[list[dict], dict]:

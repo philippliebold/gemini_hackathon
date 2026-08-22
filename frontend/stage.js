@@ -12,7 +12,7 @@
 
 const Q = new URLSearchParams(location.search);
 const WS_URL = Q.get("ws") || "ws://127.0.0.1:8765";
-const MAX_LIVE = +(Q.get("max") || 3);   // more than three and nothing is the subject
+const MAX_LIVE = +(Q.get("max") || 1);   // one subject at a time. Always.
 const LIFETIME = +(Q.get("hold") || 26000);  // a scene nobody refreshes retires itself
 
 const el = {
@@ -118,6 +118,23 @@ const SCENE = {
     ${d.title ? `<div class="t-kicker">${esc(d.title)}</div>` : ""}
     <div class="glass mermaid-slot" data-src="${esc(d.mermaid || "")}"></div>`,
 
+  /* The recap. Apple ends a keynote with every point on one screen at once;
+     this is that. Tiles stagger in so the room watches it assemble. */
+  summary: (d) => {
+    const items = (d.items || []).slice(0, 12);
+    const cols = items.length <= 4 ? 2 : items.length <= 9 ? 3 : 4;
+    return `
+    ${d.title ? `<div class="sum-title">${words(d.title, .05)}</div>` : ""}
+    <div class="sum-grid" style="--cols:${cols}">
+      ${items.map((it, i) => `
+        <div class="sum-tile" style="animation-delay:${(.25 + i * .09).toFixed(2)}s">
+          ${it.emoji ? `<div class="sum-emoji">${esc(it.emoji)}</div>` : ""}
+          ${it.value ? `<div class="sum-value">${esc(it.value)}</div>` : ""}
+          <div class="sum-label">${esc(it.label || "")}</div>
+        </div>`).join("")}
+    </div>`;
+  },
+
   code: (d) => `
     ${d.title ? `<div class="t-kicker">${esc(d.title)}</div>` : ""}
     <div class="glass"><pre style="margin:0;font-family:var(--font-mono);
@@ -139,7 +156,13 @@ function retire(id) {
   clearTimeout(s.timer);
   live.delete(id);
   s.node.classList.add("out");
-  setTimeout(() => { s.node.remove(); relayout(); }, 760);
+  /* Stack it in the SAME grid cell as whatever arrives next, so the outgoing
+     and incoming scenes cross-fade in place. (Absolute positioning here
+     escaped the stage padding and bled off the left edge.) */
+  s.node.style.gridArea = "1 / 1";
+  s.node.style.pointerEvents = "none";
+  s.node.style.zIndex = "0";
+  setTimeout(() => { s.node.remove(); relayout(); }, 780);
   relayout();
 }
 
@@ -156,9 +179,17 @@ function relayout() {
 }
 
 function addScene(p) {
-  if (live.has(p.id)) retire(p.id);
+  /* Replacing the same id: drop the old node NOW. retire() keeps it in the
+     DOM for its exit animation, which would paint both copies on top of
+     each other — the doubled-text bug. */
+  if (live.has(p.id)) {
+    const prev = live.get(p.id);
+    clearTimeout(prev.timer);
+    prev.node.remove();
+    live.delete(p.id);
+  }
 
-  /* keep the stage uncrowded: the oldest leaves as the newest arrives */
+  /* one subject at a time: whatever is on stage leaves as this arrives */
   while (live.size >= MAX_LIVE) retire(live.keys().next().value);
 
   const node = document.createElement("div");
