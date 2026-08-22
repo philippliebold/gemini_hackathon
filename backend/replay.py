@@ -9,11 +9,13 @@ rehearse, this takes one.
 """
 import argparse
 import pathlib
+import re
 import sys
 import time
 
 import canvas
 import tools
+from config import CFG
 
 PASS, FAIL = "\033[32m✓\033[0m", "\033[31m✗\033[0m"
 _fails: list[str] = []
@@ -227,8 +229,17 @@ def emit_fixture(path: str) -> None:
             rec(0.9 if i == 0 else 0.25, f)
     rec(1.5, ops.status("listening"))
 
-    pathlib.Path(path).write_text(
-        "\n".join(__import__("json").dumps(o, ensure_ascii=False) for o in out) + "\n")
+    # A fixture generated from a live run bakes CFG.maps_key into every embed_url.
+    # That is exactly how a live key reached public main twice. The stage
+    # substitutes a real one from ?mapskey= at demo time, so redact here always.
+    blob = "\n".join(__import__("json").dumps(o, ensure_ascii=False) for o in out)
+    if CFG.maps_key:
+        blob = blob.replace(CFG.maps_key, "YOUR_MAPS_KEY")
+    leaked = re.findall(r"AIzaSy[A-Za-z0-9_\-]{20,}|AQ\.[A-Za-z0-9_\-]{20,}", blob)
+    if leaked:
+        raise SystemExit(f"refusing to write {path}: it still contains "
+                         f"{len(leaked)} key-shaped string(s)")
+    pathlib.Path(path).write_text(blob + "\n")
     kinds: dict[str, int] = {}
     for o in out:
         kinds[o["op"]] = kinds.get(o["op"], 0) + 1
