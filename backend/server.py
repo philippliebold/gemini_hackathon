@@ -203,6 +203,10 @@ async def on_presenter(action: str | None) -> None:
         push_mics()
     elif action in ("listen_on", "listen_off"):
         runtime.set_listening(action == "listen_on")
+        if action == "listen_off":
+            brain = CONTROL.get("brain")
+            if brain is not None:
+                brain.abort()          # stop means stop, including work in flight
         broadcast(ops.status("listening" if runtime.listening() else "idle"))
         push_mics()
     elif action == "context_reset":

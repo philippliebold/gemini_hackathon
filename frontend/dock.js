@@ -487,11 +487,11 @@ const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 let recog = null;
 
 function setListenUI(on) {
-  if (!dock.listen) return;
-  dock.listen.classList.toggle("on", on);
-  dock.listen.querySelector(".msym").textContent = on ? "graphic_eq" : "record_voice_over";
-  dock.listen.title = on ? "Stop browser transcription"
-                         : "Transcribe in this browser (no mic setup needed)";
+  if (!dock.sr) return;
+  dock.sr.classList.toggle("on", on);
+  dock.sr.querySelector(".msym").textContent = on ? "graphic_eq" : "record_voice_over";
+  dock.sr.title = on ? "Stop browser transcription"
+                     : "Transcribe in this browser instead of on the Mac (Chrome only)";
 }
 
 function startListening() {
@@ -535,8 +535,12 @@ function stopListening() {
   setListenUI(false);
 }
 
-dock.listen = document.getElementById("listen-btn");
-if (dock.listen) {
-  if (!SR) dock.listen.style.display = "none";     // not Chrome: hide it
-  dock.listen.onclick = () => (recog ? stopListening() : startListening());
+/* Its own button. This used to hang off #listen-btn, which SILENTLY OVERWROTE the
+   stop switch: the button toggled browser transcription and no longer halted the
+   backend or its API calls, and on non-Chrome it hid the stop switch entirely.
+   Two features must never share one control, least of all a safety one. */
+dock.sr = document.getElementById("sr-btn");
+if (dock.sr) {
+  if (!SR) dock.sr.style.display = "none";         // not Chrome: nothing to offer
+  dock.sr.onclick = () => (recog ? stopListening() : startListening());
 }

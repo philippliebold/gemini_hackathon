@@ -112,6 +112,7 @@ class Brain:
         self._last = 0.0
         self._seen = ""
         self._inflight = 0
+        self._tasks: set = set()
         self.calls = 0
         self.dropped = 0
         self.skipped = 0
@@ -166,6 +167,23 @@ class Brain:
         print("[brain] no usable model — the canvas will stay blank")
 
     # --- ingest -------------------------------------------------------------
+    def abort(self) -> int:
+        """Cancel work already in flight.
+
+        Refusing NEW calls is not the same as stopping: a request issued a moment
+        before you hit stop still completes, still bills, and still draws. Stop has
+        to mean stop.
+        """
+        n = 0
+        for t in list(self._tasks):
+            if not t.done():
+                t.cancel()
+                n += 1
+        self._buf = ""
+        if n:
+            print(f"[brain] cancelled {n} call(s) in flight")
+        return n
+
     def clear(self) -> None:
         """Forget the recent lines. Paired with memory.reset()."""
         self.recent.clear()
@@ -232,7 +250,9 @@ class Brain:
                 continue
             # Fire and forget: a slow decision must never hold up the next
             # sentence, or one bad call stalls the whole board.
-            asyncio.create_task(self._guarded(line))
+            t = asyncio.create_task(self._guarded(line))
+            self._tasks.add(t)
+            t.add_done_callback(self._tasks.discard)
 
     async def _guarded(self, line: str) -> None:
         self._inflight += 1
