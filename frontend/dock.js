@@ -35,7 +35,16 @@ const dock = {
   gateV:  document.getElementById("gate-val"),
   gateL:  document.getElementById("gate-level"),
   gateM:  document.getElementById("gate-mark"),
+  notesBtn: document.getElementById("notes-btn"),
+  notes:  document.getElementById("notes"),
+  nThread: document.getElementById("notes-thread"),
+  nBody:  document.getElementById("notes-body"),
+  nAge:   document.getElementById("notes-age"),
+  nClose: document.getElementById("notes-close"),
+  reset:  document.getElementById("reset-btn"),
 };
+
+let notes = null;
 
 /* --- auto-hide: the presenter faces the room, so chrome shouldn't linger --- */
 let hideTimer, stirTimer;
@@ -87,7 +96,40 @@ function onMics(p) {
     dock.qr.dataset.done = "1";
   }
   if (p.gate !== undefined) renderGate(p.gate);
+  if (p.notes) onNotes(p.notes);
   renderRoster();
+}
+
+const esc = (t) => String(t == null ? "" : t).replace(/[<>&]/g, "");
+
+/* The record is the artifact that survives the talk. Sections rather than a blob so
+   a glance finds the thing you are looking for. */
+function onNotes(sm) {
+  notes = sm || {};
+  if (!dock.nBody) return;
+  const has = (k) => Array.isArray(notes[k]) && notes[k].length;
+
+  dock.nThread.textContent = notes.thread || "Nothing captured yet — start talking.";
+  dock.nThread.classList.toggle("empty", !notes.thread);
+
+  const section = (icon, label, items) => items.length ? `
+    <div class="notes-sec">
+      <div class="notes-lbl"><span class="msym">${icon}</span>${label}</div>
+      <ul>${items.map((i) => `<li>${i}</li>`).join("")}</ul>
+    </div>` : "";
+
+  dock.nBody.innerHTML =
+    section("lightbulb", "Topics", has("topics")
+      ? notes.topics.map((t) => `<b>${esc(t.key)}</b> ${esc(t.gist)}`) : []) +
+    section("numbers", "Numbers", has("numbers")
+      ? notes.numbers.map((n) => `<b>${esc(n.value)}</b> ${esc(n.of)}`) : []) +
+    section("task_alt", "Decided", has("decisions") ? notes.decisions.map(esc) : []) +
+    section("help", "Open questions", has("questions") ? notes.questions.map(esc) : []);
+
+  const n = ["topics", "numbers", "decisions", "questions"]
+    .reduce((a, k) => a + (has(k) ? notes[k].length : 0), 0);
+  dock.nAge.textContent = n ? `${n} captured` : "";
+  if (dock.notesBtn) dock.notesBtn.classList.toggle("has", n > 0);
 }
 
 /* Track is scaled so 0.08 fills it: quiet speech lands near 20%, a loud room near
@@ -224,7 +266,26 @@ if (dock.gate) {
     window.sendPresenter(`mic_gate:${dock.gate.value}`);
   };
 }
-window.CoDock = { onMics };
+if (dock.notesBtn) dock.notesBtn.onclick = () => {
+  const on = !dock.notes.classList.contains("on");
+  dock.notes.classList.toggle("on", on);
+  if (on) window.sendPresenter("mics_refresh");   /* pull the latest record */
+  poke();
+};
+if (dock.nClose) dock.nClose.onclick = () => dock.notes.classList.remove("on");
+if (dock.reset) dock.reset.onclick = () => {
+  /* deliberately unconfirmed: a rehearsal control, and speed matters more than
+     protecting a board you are about to rebuild anyway */
+  window.sendPresenter("context_reset");
+  onNotes({});
+  poke();
+};
+addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && dock.notes) dock.notes.classList.remove("on");
+  if (e.key.toLowerCase() === "n" && !e.metaKey && !e.ctrlKey && dock.notesBtn)
+    dock.notesBtn.click();
+});
+window.CoDock = { onMics, onNotes };
 dock.clear.onclick = () => { window.CoStage.clearAll(); window.sendPresenter("clear"); };
 
 

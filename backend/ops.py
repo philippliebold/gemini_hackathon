@@ -103,6 +103,16 @@ def mics_state(payload: dict) -> dict:
     return _frame("mics.state", payload)
 
 
+def notes_state(summary: dict) -> dict:
+    """CONTRACT ADDITION (announced): op "notes.state".
+
+    The rolling record of the talk — thread, topics, numbers, decisions, open
+    questions. Chrome, never a scene. This is the thing that remains after the
+    talking stops, and the reason the canvas is more than a slideshow.
+    """
+    return _frame("notes.state", summary)
+
+
 def status(state: str, transcript: str | None = None) -> dict:
     if state not in STATES:
         raise ValueError(f"unknown state {state!r}")

@@ -271,3 +271,36 @@ body.clean.stirring .reveal {
 /* locked: on, and not yours to turn off */
 .dock-btn.ghost.locked { cursor: default; opacity: 1; }
 .dock-btn.ghost.locked:hover { background: rgba(168,107,255,.26); }
+
+
+/* ---------- the running record ---------- */
+.notes-card { min-width: 520px; max-width: 620px; }
+.notes-head { display: flex; justify-content: space-between; align-items: baseline; }
+.notes-age { font-size: 12px; color: #5F6368; }
+.notes-thread {
+  margin: 12px 0 16px; padding: 13px 15px; border-radius: 16px;
+  background: rgba(66,133,244,.14); color: #DCE9FF; font-size: 16px; line-height: 1.4;
+}
+.notes-thread.empty { background: rgba(255,255,255,.06); color: #5F6368; font-size: 14px; }
+.notes-body { max-height: 46vh; overflow-y: auto; }
+.notes-body:empty::after {
+  content: "Topics, numbers and decisions appear here as they are said.";
+  color: #5F6368; font-size: 13px;
+}
+.notes-sec { margin-bottom: 15px; }
+.notes-lbl {
+  display: flex; align-items: center; gap: 7px; margin-bottom: 6px;
+  font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: #9FB7D8;
+}
+.notes-lbl .msym { font-size: 15px; color: #7FB0FF; }
+.notes-sec ul { margin: 0; padding-left: 2px; list-style: none; }
+.notes-sec li {
+  font-size: 14px; color: #EAF2FF; line-height: 1.5; padding: 3px 0 3px 12px;
+  border-left: 2px solid rgba(255,255,255,.14);
+}
+.notes-sec li b { color: #7FB0FF; font-weight: 500; margin-right: 5px; }
+.dock-btn.has { position: relative; }
+.dock-btn.has::after {
+  content: ""; position: absolute; top: 9px; right: 9px;
+  width: 6px; height: 6px; border-radius: 50%; background: #7FB0FF;
+}

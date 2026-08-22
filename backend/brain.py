@@ -53,7 +53,7 @@ def worth_asking(line: str) -> bool:
     if any(c.isdigit() for c in t):
         return len(words) >= 2
     return len(t) >= MIN_CHARS and len(words) >= 4
-WINDOW = 6               # utterances of context handed over
+WINDOW = 14              # recent lines handed over verbatim
 REPROBE_S = 45.0         # how often to try to climb back to the primary model
 # A model that answers in 25 s is not "available" for this product — the visual has
 # to land while the speaker is still on the topic. Probes are judged on latency, not
@@ -117,8 +117,9 @@ def _why(exc: Exception) -> str:
 
 
 class Brain:
-    def __init__(self, broadcast: Callable[[dict], None]):
+    def __init__(self, broadcast: Callable[[dict], None], memory=None):
         self.broadcast = broadcast
+        self.memory = memory
         self.client = genai.Client(api_key=CFG.api_key)
         # Preference order. thinking_budget=0 roughly halves 3.7-flash's latency
         # (3.0s -> 1.7s measured); older flash models reject the parameter with a
@@ -191,6 +192,13 @@ class Brain:
         print("[brain] no usable model — the canvas will stay blank")
 
     # --- ingest -------------------------------------------------------------
+    def clear(self) -> None:
+        """Forget the recent lines. Paired with memory.reset()."""
+        self.recent.clear()
+        self._buf = ""
+        self._seen = ""
+        self.speaker = None
+
     async def set_enabled(self, on: bool) -> None:
         """Turn the brain on or off mid-talk.
 
@@ -296,11 +304,35 @@ class Brain:
         self.recent.append(tagged)
         del self.recent[:-WINDOW]
 
+        # THE RECORD is what makes this build instead of react. Without it the model
+        # sees one sentence at a time and draws unconnected fragments; with it, a new
+        # line is read against everything already established.
+        record = ""
+        if self.memory is not None:
+            sm = self.memory.summary or {}
+            bits = []
+            if sm.get("thread"):
+                bits.append(f"Currently discussing: {sm['thread']}")
+            if sm.get("topics"):
+                bits.append("Topics so far: " + "; ".join(
+                    f"{t.get('key','?')} — {t.get('gist','')}" for t in sm["topics"]))
+            if sm.get("numbers"):
+                bits.append("Numbers stated: " + "; ".join(
+                    f"{n.get('value')} ({n.get('of')})" for n in sm["numbers"]))
+            if sm.get("decisions"):
+                bits.append("Decided: " + "; ".join(sm["decisions"]))
+            if sm.get("questions"):
+                bits.append("Open questions: " + "; ".join(sm["questions"]))
+            if bits:
+                record = "THE RECORD OF THIS TALK SO FAR:\n" + "\n".join(bits) + "\n\n"
+
         prompt = (
+            f"{record}"
             f"{canvas.manifest_text()}\n\n"
-            f"EARLIER LINES:\n" + "\n".join(self.recent[:-1]) +
+            f"RECENT LINES:\n" + "\n".join(self.recent[:-1]) +
             f"\n\nTHE LINE JUST SPOKEN:\n{tagged}\n\n"
-            "Call one tool, or none."
+            "Read the new line against the record and the canvas. Grow what is "
+            "already there if it belongs to the same topic. Call one tool, or none."
         )
         t0 = time.time()
         self.broadcast(ops.status("thinking", line))

@@ -139,7 +139,7 @@ async def main(args):
     macmic = audio.MacMic(q, floor)
     server.CONTROL.update({
         "floor": floor, "macmic": macmic, "max_mics": mics.MAX_MICS,
-        "devices": audio.input_devices, "brain": brain,
+        "devices": audio.input_devices, "brain": brain, "memory": mem,
         "join_url": f"https://{mic_server.lan_ip()}:{CFG.mic_port}/",
     })
     server.CONTROL["qr_svg"] = qr_svg(server.CONTROL["join_url"])

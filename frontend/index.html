@@ -74,6 +74,13 @@
       <span class="msym">videocam_off</span><span>Camera</span>
     </button>
     <div class="dock-sep"></div>
+    <button id="notes-btn" class="dock-btn" title="The running record of this talk (N)">
+      <span class="msym">sticky_note_2</span><span>Notes</span>
+    </button>
+    <button id="reset-btn" class="dock-btn ghost"
+            title="Clear the board AND the running record — start the talk over">
+      <span class="msym">restart_alt</span>
+    </button>
     <button id="brain-btn" class="dock-btn ghost"
             title="Let gemini-3.7-flash decide what to draw, instead of the live ear">
       <span class="msym">neurology</span>
@@ -97,6 +104,16 @@
   </button>
 
   <div id="cam-wrap" class="cam-wrap"><video id="cam" autoplay muted playsinline></video></div>
+
+  <div id="notes" class="picker"><div class="picker-card notes-card">
+    <div class="notes-head">
+      <div class="picker-title" style="margin:0">The record so far</div>
+      <span id="notes-age" class="notes-age"></span>
+    </div>
+    <div id="notes-thread" class="notes-thread"></div>
+    <div id="notes-body" class="notes-body"></div>
+    <button id="notes-close" class="picker-cancel">Done</button>
+  </div></div>
 
   <div id="phone" class="picker"><div class="picker-card phone-card">
     <div class="picker-title">Join a phone as a microphone</div>

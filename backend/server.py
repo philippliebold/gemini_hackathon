@@ -54,6 +54,8 @@ def mics_payload() -> dict:
                 "device": mac.device if mac else None},
         "gate": mics.GATE_RMS,
         "ear": CONTROL.get("ear", "live"),
+        "notes": (CONTROL["memory"].summary
+                  if CONTROL.get("memory") is not None else None),
         "brain": {"enabled": bool(brain and brain.enabled),
                   "model": (brain.model if brain and brain.enabled else None)},
     }
@@ -150,6 +152,20 @@ async def on_presenter(action: str | None) -> None:
             print("[said] no brain attached; run with --brain")
             return
         brain.feed(line)
+    elif action == "context_reset":
+        # Full reset: the board, the running record, and the model's recent lines.
+        # Rehearsing the same script three times otherwise has it reasoning about
+        # the previous run-throughs.
+        canvas.reset()
+        broadcast(ops.canvas_clear())
+        mem = CONTROL.get("memory")
+        if mem is not None:
+            mem.reset()
+        brain = CONTROL.get("brain")
+        if brain is not None:
+            brain.clear()
+        push_mics()
+        print("[ws] context reset by the presenter")
     elif action == "mics_refresh":
         push_mics()
     # TODO: pause / resume

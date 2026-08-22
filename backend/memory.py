@@ -143,8 +143,30 @@ class TopicMemory:
         self._consumed = self._total
         self._runs += 1
         self._save()
+        self._publish()
         print(f"[mem] #{self._runs} thread={self.summary.get('thread', '')!r} "
               f"topics={len(self.summary.get('topics', []))}")
+
+    def _publish(self) -> None:
+        """Put the running record on screen. Never raises."""
+        try:
+            import ops
+            import server
+            server.broadcast(ops.notes_state(self.summary))
+        except Exception as e:                       # noqa: BLE001
+            print(f"[mem] could not publish notes: {e}")
+
+    def reset(self) -> None:
+        """Start a fresh talk. Testing the same demo repeatedly otherwise leaves the
+        model reasoning about the previous three run-throughs."""
+        self.summary = dict(EMPTY)
+        self._frag.clear()
+        self._total = self._consumed = 0
+        self.started = time.time()
+        self._runs = 0
+        self._save()
+        self._publish()
+        print("[mem] context cleared")
 
     # --- reads --------------------------------------------------------------
     def resume_brief(self) -> str:
