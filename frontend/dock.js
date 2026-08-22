@@ -54,13 +54,27 @@ let listening = true;
 let notes = null;
 
 /* --- auto-hide: the presenter faces the room, so chrome shouldn't linger --- */
+const HIDE_AFTER_MS = 6000;
 let hideTimer, stirTimer;
+
+/* A hidden dock is `pointer-events: none`, so hiding it under a cursor that is
+   on its way to a button turns the whole dock into a dead zone: the click lands
+   on the canvas and nothing happens. Anything the presenter is actively using
+   keeps it up. */
+function dockInUse() {
+  return !!document.querySelector(".picker.on") || dock.root.matches(":hover");
+}
+
 function poke() {
   dock.root.classList.remove("hidden");
   clearTimeout(hideTimer);
-  hideTimer = setTimeout(() => {
-    if (!dock.picker.classList.contains("on")) dock.root.classList.add("hidden");
-  }, 3000);
+  const arm = () => {
+    hideTimer = setTimeout(() => {
+      if (dockInUse()) return arm();
+      dock.root.classList.add("hidden");
+    }, HIDE_AFTER_MS);
+  };
+  arm();
 
   /* `stirring` means someone is at the machine. It is what surfaces the
      reveal button while the controls are hidden. */
@@ -68,7 +82,7 @@ function poke() {
   clearTimeout(stirTimer);
   stirTimer = setTimeout(() => document.body.classList.remove("stirring"), 2600);
 }
-["mousemove", "keydown", "touchstart", "wheel"].forEach((e) =>
+["mousemove", "pointerdown", "keydown", "touchstart", "wheel"].forEach((e) =>
   addEventListener(e, poke, { passive: true }));
 poke();
 

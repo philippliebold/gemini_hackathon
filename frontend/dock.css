@@ -4,7 +4,10 @@
 .dock {
   position: fixed; bottom: 26px; left: 50%;
   transform: translateX(-50%);
-  display: flex; align-items: center; gap: 6px;
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  /* Every button is reachable on a laptop screen too: unwrapped, the row is
+     ~1230px and the outer controls hang off both edges of the viewport. */
+  flex-wrap: wrap; max-width: calc(100vw - 32px);
   padding: 10px 14px; z-index: 30;
   background: rgba(12, 30, 58, .72);
   border: 1px solid rgba(255,255,255,.14);
