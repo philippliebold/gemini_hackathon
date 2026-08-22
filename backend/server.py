@@ -53,6 +53,7 @@ def mics_payload() -> dict:
         "mac": {"active": bool(mac and mac.active),
                 "device": mac.device if mac else None},
         "gate": mics.GATE_RMS,
+        "ear": CONTROL.get("ear", "live"),
         "brain": {"enabled": bool(brain and brain.enabled),
                   "model": (brain.model if brain and brain.enabled else None)},
     }

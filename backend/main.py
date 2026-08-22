@@ -7,6 +7,7 @@
     python backend/main.py --no-phones      # only the Mac's mic
     python backend/main.py --pcm talk.pcm   # replay a recording (add MANUAL_ACTIVITY=1)
     python backend/main.py --brain          # 3.7-flash decides instead of the ear
+    python backend/main.py --local          # local Whisper ear + 3.7-flash brain
 
 Up to four phones can join at the printed https:// URL. See MICS.md.
 """
@@ -16,6 +17,7 @@ import sys
 
 import audio
 import brain as brain_mod
+import ears_local
 import gemini_live
 import memory as memory_mod
 import mic_server
@@ -24,6 +26,17 @@ import ops
 import server
 import tools
 from config import CFG
+
+
+async def local_pump(q: asyncio.Queue, ear, brain) -> None:
+    """Drain the audio queue into the local ear instead of the Live session."""
+    while True:
+        kind, payload = await q.get()
+        if kind == "audio":
+            ear.feed(payload)
+        elif kind == "speaker" and brain is not None:
+            brain.set_speaker(payload)
+        # activity events are meaningless locally: we own the boundaries
 
 
 async def loop_watchdog(threshold_s: float = 0.25) -> None:
@@ -125,9 +138,20 @@ async def main(args):
     })
     server.CONTROL["qr_svg"] = qr_svg(server.CONTROL["join_url"])
 
-    tasks = [server.serve(), ear(), mem.loop(), loop_watchdog(), brain.loop()]
-    if args.brain:
-        await brain.set_enabled(True)   # --brain still works as a startup flag
+    if args.local:
+        # Local ears own transcription; nothing connects to the Live API at all, so
+        # no turn-taking, no VAD guessing, no keepalive drops. The brain is the only
+        # thing that can draw, so it is on by definition.
+        local = ears_local.LocalEar(server.broadcast, brain, mem)
+        server.CONTROL["ear"] = "local"
+        await brain.set_enabled(True)
+        tasks = [server.serve(), mem.loop(), loop_watchdog(), brain.loop(),
+                 local.loop(), local_pump(q, local, brain)]
+    else:
+        server.CONTROL["ear"] = "live"
+        tasks = [server.serve(), ear(), mem.loop(), loop_watchdog(), brain.loop()]
+        if args.brain:
+            await brain.set_enabled(True)
 
     if args.pcm:
         # One voice, but still through the floor: that is what produces the turn
@@ -164,6 +188,9 @@ if __name__ == "__main__":
                    help="don't run the phone-mic server")
     p.add_argument("--phones-only", action="store_true",
                    help="ignore the Mac's own mic; phones only")
+    p.add_argument("--local", action="store_true",
+                   help="transcribe locally with Whisper instead of the Live API: "
+                        "continuous, no turn detection, audio never leaves the Mac")
     p.add_argument("--brain", action="store_true",
                    help="let gemini-3.7-flash make the drawing decisions from the "
                         "transcript instead of the Live session (fallback path)")
