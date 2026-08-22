@@ -267,3 +267,7 @@ body.clean.stirring .reveal {
 }
 .gate-slider { width: 100%; accent-color: #7FB0FF; margin: 2px 0 0; }
 .gate-hint { font-size: 11px; color: #5F6368; line-height: 1.35; }
+
+/* locked: on, and not yours to turn off */
+.dock-btn.ghost.locked { cursor: default; opacity: 1; }
+.dock-btn.ghost.locked:hover { background: rgba(168,107,255,.26); }

@@ -126,9 +126,17 @@ async def on_presenter(action: str | None) -> None:
         push_mics()
     elif action in ("brain_on", "brain_off"):
         brain = CONTROL.get("brain")
-        if brain is not None:
-            await brain.set_enabled(action == "brain_on")
+        if brain is None:
+            return
+        # With local ears nothing else can draw: the Live API is not even
+        # connected. Switching the brain off there does not hand the canvas back
+        # to anything, it just makes the screen go permanently blank.
+        if action == "brain_off" and CONTROL.get("ear") == "local":
+            print("[brain] refused: local ears have no other way to draw")
             push_mics()
+            return
+        await brain.set_enabled(action == "brain_on")
+        push_mics()
     elif action and action.startswith("said:"):
         # Transcript from the browser's own speech recognition. Lets the screen
         # drive the canvas with no PortAudio, no sounddevice and no Live audio

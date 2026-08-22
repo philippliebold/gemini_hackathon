@@ -67,10 +67,14 @@ function onMics(p) {
   };
   if (dock.brain) {
     const on = micState.brain.enabled;
+    const locked = p.ear === "local";     /* nothing else can draw */
     dock.brain.classList.toggle("on", on);
-    dock.brain.title = on
-      ? `Drawing decided by ${micState.brain.model || "3.7-flash"} — click to hand it back to the live ear`
-      : "Let gemini-3.7-flash decide what to draw, instead of the live ear";
+    dock.brain.classList.toggle("locked", locked);
+    dock.brain.title = locked
+      ? `Local ears: ${micState.brain.model || "3.7-flash"} is the only thing that can draw, so this stays on`
+      : on
+        ? `Drawing decided by ${micState.brain.model || "3.7-flash"} — click to hand it back to the live ear`
+        : "Let gemini-3.7-flash decide what to draw, instead of the live ear";
   }
   MAX_MICS = p.max_mics || 4;
 
@@ -202,6 +206,7 @@ addEventListener("keydown", (e) => {
   if (e.key.toLowerCase() === "m" && !e.metaKey && !e.ctrlKey) pickMacDevice();
 });
 if (dock.brain) dock.brain.onclick = () => {
+  if (dock.brain.classList.contains("locked")) return;
   /* optimistic: the backend echoes the real state back on mics.state */
   const next = !micState.brain.enabled;
   dock.brain.classList.toggle("on", next);
