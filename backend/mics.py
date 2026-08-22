@@ -24,6 +24,8 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+import vitals
+
 MAX_MICS = 4
 
 # Tuning. Defaults are for phones held at conversational distance in a loud room.
@@ -160,6 +162,9 @@ class Floor:
         if mic is None:
             return False, []
         if mic.muted:
+            vitals.trace("mic", "drop", "muted on the phone",
+                         detail=f"{mic.label} is sending nothing to the ear",
+                         throttle=5.0)
             # Muted means muted: not forwarded, not levelled, and it gives up the
             # floor so a muted phone cannot sit on the stream.
             mic.last_rms = 0.0
@@ -202,6 +207,12 @@ class Floor:
                     self.announced = mic_id
 
             if self.holder != mic_id:
+                held = self.mics.get(self.holder)
+                vitals.trace("mic", "drop", "another mic holds the floor",
+                             detail=f"{mic.label} is loud enough, but "
+                                    f"{held.label if held else 'another mic'} "
+                                    f"has the stream",
+                             throttle=3.0)
                 return False, events        # someone else owns the stream
             if not self.turn_open:
                 events.append(("activity", "start"))
@@ -210,6 +221,13 @@ class Floor:
 
         # Below the gate.
         if self.holder != mic_id:
+            # Nobody has the floor and this mic is too quiet to take it: the single
+            # most common reason the screen looks dead while someone is talking.
+            if self.holder is None:
+                vitals.trace("mic", "drop", f"below MIC_GATE {self.gate:.3f}",
+                             detail=f"{mic.label} at {level:.4f} — drag "
+                                    f"Sensitivity left if this is your voice",
+                             throttle=3.0)
             return False, events
         quiet = now - mic.last_voice
         if self.turn_open and quiet > self.turn_silence:

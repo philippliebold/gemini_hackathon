@@ -32,7 +32,9 @@
         "canvas.clear",
         "status",
         "mics.state",
-        "notes.state"
+        "notes.state",
+        "trace",
+        "health.state"
       ]
     },
     "payload": {
@@ -132,6 +134,64 @@
               },
               "transcript": {
                 "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "op": {
+            "const": "trace"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "required": [
+              "stage",
+              "verdict",
+              "reason"
+            ],
+            "properties": {
+              "stage": {
+                "enum": [
+                  "mic",
+                  "ear",
+                  "brain",
+                  "tool",
+                  "canvas",
+                  "asset"
+                ]
+              },
+              "verdict": {
+                "enum": [
+                  "ok",
+                  "hold",
+                  "skip",
+                  "drop",
+                  "block",
+                  "error"
+                ]
+              },
+              "reason": {
+                "type": "string"
+              },
+              "text": {
+                "type": "string"
+              },
+              "detail": {
+                "type": "string"
+              },
+              "ms": {
+                "type": "number"
+              },
+              "n": {
+                "type": "integer",
+                "minimum": 1
               }
             }
           }

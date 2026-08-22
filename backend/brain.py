@@ -27,6 +27,7 @@ import canvas
 import ops
 import runtime
 import tools
+import vitals
 from config import CFG
 
 # Only for the --live path, where input_transcription arrives as overlapping
@@ -163,6 +164,17 @@ class Brain:
         self.enabled = False        # flipped from the screen; see server.on_presenter
         self._probed = False
         self._demoted_at = 0.0      # when we last fell back off the primary
+        # False until a model has actually answered a probe. A brain with nothing
+        # behind it used to be a print and a blank screen forever; now it is a state
+        # the screen can show and the loop keeps retrying.
+        self.usable = False
+        self._probed_at = 0.0
+
+    @property
+    def inflight(self) -> int:
+        """How many decisions are running right now. On the console this is the
+        difference between a slow model and a stuck one."""
+        return self._inflight
 
     def _cfg(self, think: int | None) -> types.GenerateContentConfig:
         c = types.GenerateContentConfig(
@@ -175,13 +187,19 @@ class Brain:
             c.thinking_config = types.ThinkingConfig(thinking_budget=think)
         return c
 
-    async def select_model(self) -> None:
+    async def select_model(self) -> bool:
         """Probe the chain once at startup and stick to the first model that works.
 
         Doing this at boot rather than mid-talk matters: a 429 on the primary would
         otherwise cost a wasted round trip on every single sentence. The operator
         also gets told, up front, which brain is actually driving the screen.
+
+        Returns whether anything usable answered. Nothing usable means the canvas
+        cannot draw at all, which is worth a frame rather than a print: a blank
+        screen from a dead chain looks exactly like a blank screen from restraint.
         """
+        self._probed_at = time.time()
+        why: list[str] = []
         for model, think in self.chain:
             t0 = time.time()
             try:
@@ -192,23 +210,45 @@ class Brain:
                     timeout=PROBE_TIMEOUT_S)
             except asyncio.TimeoutError:
                 print(f"[brain] {model} too slow (>{PROBE_TIMEOUT_S:.0f}s) — skipping")
+                why.append(f"{model}: slower than {PROBE_TIMEOUT_S:.0f}s")
                 continue
             except Exception as e:  # noqa: BLE001
                 print(f"[brain] {model} (thinking={think}) unavailable: "
                       f"{str(e)[:70]}")
+                why.append(f"{model}: {_why(e)}")
                 continue
             self.model, self.think = model, think
+            self.usable = True
             tag = "thinking off" if think == 0 else "default thinking"
             print(f"[brain] driving the canvas with {model} ({tag}) "
                   f"— probe {time.time()-t0:.2f}s")
+            vitals.STATE["brain_model"] = model
+            vitals.STATE["brain_error"] = None
+            vitals.STATE["brain_fallback"] = model != CFG.model
             if model != CFG.model:
                 self._demoted_at = time.time()
                 print(f"[brain] NOTE: on a fallback; retrying {CFG.model} "
                       f"every {REPROBE_S:.0f}s")
+                vitals.trace("brain", "ok", f"on fallback {model}",
+                             ms=(time.time() - t0) * 1000,
+                             detail=f"{CFG.model} unusable; retrying it every "
+                                    f"{REPROBE_S:.0f}s")
             else:
                 self._demoted_at = 0.0
-            return
-        print("[brain] no usable model — the canvas will stay blank")
+                vitals.trace("brain", "ok", f"driving with {model}",
+                             ms=(time.time() - t0) * 1000, detail=tag)
+            return True
+
+        self.usable = False
+        detail = "; ".join(why)[:200]
+        print(f"[brain] no usable model — the canvas will stay blank ({detail})")
+        vitals.STATE["brain_model"] = None
+        vitals.STATE["brain_error"] = detail
+        vitals.trace("brain", "error", "no usable model — nothing can draw",
+                     detail=detail)
+        self.broadcast(ops.status(
+            "error", "No usable model — check GEMINI_API_KEY and billing"))
+        return False
 
     # --- ingest -------------------------------------------------------------
     def abort(self) -> int:
@@ -276,9 +316,15 @@ class Brain:
         arrive more than once and have to settle before we act.
         """
         if not self.enabled or not runtime.listening():
+            vitals.trace("brain", "skip",
+                         "brain off" if not self.enabled else "stopped (Stop is on)",
+                         text=text, throttle=3.0)
             return
         t = text.strip()
-        if not t or t in self._seen[-400:]:
+        if not t:
+            return
+        if t in self._seen[-400:]:
+            vitals.trace("brain", "skip", "already said (duplicate line)", text=t)
             return
         self._seen = (self._seen + " " + t)[-2000:]
         if complete:
@@ -292,9 +338,21 @@ class Brain:
         the sentence spoken after it."""
         if not worth_asking(line):
             self.skipped += 1
+            vitals.trace("brain", "skip",
+                         f"not worth asking (MIN_CHARS {MIN_CHARS}, "
+                         f"BRAIN_MIN_CONTENT {MIN_CONTENT_WORDS})",
+                         text=line, detail="no API call made", count="skipped")
             return
         if self._inflight >= MAX_INFLIGHT:
             self.dropped += 1
+            vitals.trace("brain", "drop", f"BRAIN_INFLIGHT {MAX_INFLIGHT} reached",
+                         text=line, detail="too many decisions already running",
+                         count="dropped")
+            return
+        if not self.usable:
+            vitals.trace("brain", "skip", "no usable model", text=line,
+                         detail=vitals.STATE.get("brain_error") or "probe failed",
+                         throttle=5.0)
             return
         t = asyncio.create_task(self._guarded(line, refine=refine))
         self._tasks.add(t)
@@ -309,6 +367,13 @@ class Brain:
             await asyncio.sleep(0.1)
             if not self.enabled or not runtime.listening():
                 continue
+            # Nothing answered the probe. Keep trying: enabling billing or a quota
+            # rolling over should not need a restart in the middle of a talk.
+            if not self.usable and self._probed \
+                    and time.time() - self._probed_at >= REPROBE_S:
+                if await self.select_model():
+                    import server
+                    server.push_mics()
             if not self._buf.strip() or time.time() - self._last < DEBOUNCE_S:
                 continue
             if self._inflight >= MAX_INFLIGHT:
@@ -324,12 +389,26 @@ class Brain:
         except asyncio.TimeoutError:
             self.dropped += 1
             print(f"[brain] missed the moment (>{DEADLINE_S}s) — {line[:50]!r}")
+            vitals.trace("brain", "drop", f"BRAIN_DEADLINE {DEADLINE_S}s exceeded",
+                         text=line, detail="the model never answered",
+                         count="dropped")
             self.broadcast(ops.status("listening"))
+        except asyncio.CancelledError:
+            # abort() cancels in-flight work when Stop is pressed. Without this arm
+            # the last thing broadcast was "thinking" or "drawing", and the screen
+            # sat in that state forever — the pipeline looked hung when it had
+            # simply been told to stop.
+            vitals.trace("brain", "drop", "cancelled by Stop", text=line)
+            self.broadcast(ops.status(
+                "listening" if runtime.listening() else "idle"))
+            raise
         except Exception as e:  # noqa: BLE001 - never take the demo down
             print(f"[brain] {type(e).__name__}: {str(e)[:110]}")
             # Say WHY on screen. A blank canvas from an exhausted quota looks
             # exactly like a blank canvas from a broken pipeline, and that
             # ambiguity cost real debugging time.
+            vitals.trace("brain", "error", _why(e), text=line,
+                         detail=f"{type(e).__name__}: {str(e)[:140]}")
             self.broadcast(ops.status("error", _why(e)))
         finally:
             self._inflight -= 1
@@ -352,7 +431,12 @@ class Brain:
             return
         self.model, self.think = CFG.model, 0
         self._demoted_at = 0.0
+        self.usable = True
+        vitals.STATE["brain_model"] = CFG.model
+        vitals.STATE["brain_fallback"] = False
         print(f"[brain] reclaimed {CFG.model} — thinking off")
+        vitals.trace("brain", "ok", f"reclaimed {CFG.model}",
+                     detail="back on the primary model")
         import server
         server.push_mics()
 
@@ -414,6 +498,9 @@ class Brain:
                     model=model, contents=prompt, config=self._cfg(think))
                 if model != self.model:
                     print(f"[brain] {self.model} unavailable, drew with {model}")
+                    vitals.STATE["brain_fallback"] = True
+                    vitals.trace("brain", "ok", f"answered by {model}",
+                                 detail=f"{self.model} was unavailable for this line")
                 break
             except Exception as e:                   # noqa: BLE001
                 last = e
@@ -428,6 +515,9 @@ class Brain:
                if getattr(p, "function_call", None)]
         if not fcs:
             print(f"[brain] {time.time()-t0:.2f}s silent — {line[:60]!r}")
+            vitals.trace("brain", "skip", "the model chose silence", text=line,
+                         ms=(time.time() - t0) * 1000,
+                         detail="nothing here worth anchoring", count="silent")
             self.broadcast(ops.status("listening"))
             return
 
@@ -443,6 +533,12 @@ class Brain:
                   + (f" revises={_a.get('revises')}" if _a.get("revises") else "")
                   + " -> "
                   f"{result.get('action') or result.get('skipped') or result.get('error')}")
+            # The decision and its latency. Whether it reached the screen is the
+            # tool's story, and tools.dispatch() traces that for every caller.
+            vitals.trace("brain", "ok", f"chose {fc.name}", text=line,
+                         ms=(time.time() - t0) * 1000,
+                         detail=f"key={_a.get('key')}"
+                                + (" (refine)" if refine else ""))
             for f in frames:
                 self.broadcast(f)
         self.broadcast(ops.status("listening"))

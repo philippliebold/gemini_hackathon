@@ -14,6 +14,13 @@ BLOCK_TYPES = {"text", "stat", "diagram", "chart", "table", "image", "map", "cod
                "hero", "math", "term", "summary"}
 STATES = {"idle", "listening", "thinking", "drawing", "error"}
 
+# Where in the pipeline a decision was taken, and what it decided. Every stage can
+# choose not to draw, and until these existed the terminal was the only place that
+# said so — which made a dead Whisper model, an exhausted quota and "the model chose
+# silence" all look identical from the screen.
+TRACE_STAGES = {"mic", "ear", "brain", "tool", "canvas", "asset"}
+TRACE_VERDICTS = {"ok", "hold", "skip", "drop", "block", "error"}
+
 _seq = itertools.count(1)
 _block_n = itertools.count(1)
 _link_n = itertools.count(1)
@@ -120,6 +127,47 @@ def status(state: str, transcript: str | None = None) -> dict:
     if transcript:
         p["transcript"] = transcript
     return _frame("status", p)
+
+
+def trace(stage: str, verdict: str, reason: str, *, text: str | None = None,
+          ms: float | None = None, detail: str | None = None, n: int = 1) -> dict:
+    """CONTRACT ADDITION (announced): op "trace".
+
+    One event per decision the pipeline takes. Diagnostic only — the stage ignores
+    it; the operator console renders it. `reason` names the constant that made the
+    call ("EAR_MIN 0.8s", "cooldown 6.0s") so the log says which knob to turn.
+
+        {"stage": "ear", "verdict": "drop", "reason": "EAR_MIN 0.8s",
+         "text": "...", "ms": 120.4, "detail": "0.6s of audio", "n": 1}
+    """
+    if stage not in TRACE_STAGES:
+        raise ValueError(f"unknown trace stage {stage!r}")
+    if verdict not in TRACE_VERDICTS:
+        raise ValueError(f"unknown trace verdict {verdict!r}")
+    p: dict[str, Any] = {"stage": stage, "verdict": verdict, "reason": reason}
+    if text:
+        p["text"] = text[:200]
+    if ms is not None:
+        p["ms"] = round(ms, 1)
+    if detail:
+        p["detail"] = detail
+    if n != 1:
+        p["n"] = n
+    return _frame("trace", p)
+
+
+def health(payload: dict) -> dict:
+    """CONTRACT ADDITION (announced): op "health.state".
+
+    The pipeline's vital signs, pushed on a timer. Diagnostic only — the stage
+    ignores it, the console shows it. This is what tells you the ear is warming
+    rather than broken, and which model is actually answering.
+
+        {"ear": {"state","model"}, "brain": {"model","fallback","inflight"},
+         "listening": bool, "audio": {"queued","capacity","dropped"},
+         "loop_lag_ms": 4.0, "blocks": 1, "counts": {...}}
+    """
+    return _frame("health.state", payload)
 
 
 def dumps(frame: dict) -> str:

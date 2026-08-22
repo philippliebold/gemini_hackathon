@@ -359,6 +359,140 @@ def stage_scenario(quiet: bool) -> None:
           ops_of(f)[:1] == ["block.add"], str(ops_of(f)))
 
 
+def trace_scenario(quiet: bool) -> None:
+    """Every stage can decide not to draw. This asserts that each of those decisions
+    says so on the wire, because a silent skip and a broken pipeline are the same
+    thing from the audience's seat — and were the same thing in the logs too.
+    """
+    import ears_local
+    import ops
+    import preflight
+    import vitals
+
+    seen: list[dict] = []
+    vitals.BROADCAST = lambda frame: (seen.append(frame["payload"])
+                                      if frame["op"] == "trace" else None)
+    vitals.reset()
+    canvas.reset()
+    canvas.COOLDOWN_S = 6.0
+    canvas.FORM_LOCK_S = 12.0
+    canvas.FOCUS_THROTTLE_S = 0.0
+    canvas.STAGE_MAX_LIVE, canvas.STAGE_LIFETIME_S = 99, 9e9
+
+    def last(stage: str | None = None) -> dict:
+        for p in reversed(seen):
+            if stage is None or p["stage"] == stage:
+                return p
+        return {}
+
+    print("\n\033[1m── 17. a drawn block is traced ──────────────────────\033[0m")
+    call("show_stat", key="pricing", value="40k", label="monthly burn")
+    t = last("tool")
+    check("a successful draw traces tool/ok", t.get("verdict") == "ok", str(t))
+    check("the trace names the tool and what it did",
+          "show_stat" in t.get("reason", "") and "add" in t.get("reason", ""),
+          t.get("reason", ""))
+
+    print("\n\033[1m── 18. a cooldown says so, and names itself ─────────\033[0m")
+    frames, result = call("show_stat", key="pricing", value="41k", label="burn")
+    show("the same topic again, immediately", frames, result, quiet)
+    t = last("tool")
+    check("a cooldown traces tool/block", t.get("verdict") == "block", str(t))
+    check("the reason names COOLDOWN_S and its value",
+          "cooldown" in t.get("reason", "") and "6.0" in t.get("reason", ""),
+          t.get("reason", ""))
+    check("nothing reached the screen", frames == [], str(ops_of(frames)))
+
+    print("\n\033[1m── 19. a refused form change says so ────────────────\033[0m")
+    # A different SHAPE for a topic that is already up. The cooldown must not be
+    # what catches this, or the trace would name the wrong rule.
+    canvas.COOLDOWN_S = 0.0
+    frames, result = call("show_concept", key="pricing", title="Pricing",
+                          bullets=["it is complicated"])
+    t = last("tool")
+    check("a form change traces tool/block", t.get("verdict") == "block", str(t))
+    check("the reason names the form lock", "form" in t.get("reason", "").lower(),
+          t.get("reason", ""))
+
+    print("\n\033[1m── 20. a bad call is not silent ─────────────────────\033[0m")
+    call("show_nothing_at_all", key="x")
+    check("an unknown tool traces tool/error", last("tool").get("verdict") == "error",
+          str(last("tool")))
+    n = len(seen)
+    call("show_route", key="route-x")             # a new block missing its required
+    check("missing fields trace an error too",                 # fields
+          any(p["verdict"] == "error" for p in seen[n:]), str(seen[n:]))
+
+    print("\n\033[1m── 21. an asset that never arrives is admitted ──────\033[0m")
+    sent: list[dict] = []
+    tools.BROADCAST = sent.append
+    tools._asset_failed("b_99", "image generation failed", detail="quota")
+    check("the block is told it failed",
+          [f["payload"].get("data", {}).get("failed") for f in sent]
+          == ["image generation failed"], str(sent))
+    check("and it traces asset/error", last("asset").get("verdict") == "error",
+          str(last("asset")))
+    tools.BROADCAST = None
+
+    print("\n\033[1m── 22. a flood is coalesced, not dropped ────────────\033[0m")
+    n = len(seen)
+    for _ in range(40):
+        vitals.trace("mic", "drop", "below MIC_GATE 0.014", throttle=9e9)
+    burst = seen[n:]
+    check("40 identical events become one frame", len(burst) == 1, str(len(burst)))
+    check("the first of a burst is the one that gets through",
+          burst[0]["reason"].startswith("below MIC_GATE") if burst else False,
+          str(burst))
+    check("but the count is still honest",
+          vitals.COUNTS["mic.drop"] >= 40, str(vitals.COUNTS["mic.drop"]))
+
+    print("\n\033[1m── 23. the wire refuses a malformed trace ───────────\033[0m")
+    for bad in (("nowhere", "ok"), ("ear", "shrug")):
+        try:
+            ops.trace(*bad, "reason")
+            check(f"{bad} is rejected", False, "it was accepted")
+        except ValueError:
+            check(f"{bad!r} is rejected before it reaches a client", True)
+
+    print("\n\033[1m── 24. the stage owns its own capacity ──────────────\033[0m")
+    check("the display's policy is adopted",
+          canvas.set_stage_policy(1, 26000) == {"max_live": 1, "lifetime_s": 26.0},
+          str(canvas.set_stage_policy(1, 26000)))
+    check("a nonsense capacity is clamped, not obeyed",
+          canvas.set_stage_policy(0, 1)["max_live"] == 1)
+    canvas.set_stage_policy(3, 26000)
+    canvas.reset()
+    for k in ("a", "b", "c", "d"):
+        call("show_stat", key=k, value="1", label=k)
+    check("the manifest matches what the display said it can hold",
+          len(canvas.manifest()) == 3, str(len(canvas.manifest())))
+
+    print("\n\033[1m── 25. Whisper's inventions never reach the room ────\033[0m")
+    check("a stock phrase from silence is caught",
+          ears_local._invented("Thank you."))
+    check("a looped phrase is caught",
+          ears_local._invented("Thanks for watching. Thanks for watching. "
+                               "Thanks for watching."))
+    check("real speech is not", not ears_local._invented(
+        "our latency is 1.4 seconds from sentence to pixels"))
+
+    print("\n\033[1m── 26. preflight reports a failure, not a shrug ─────\033[0m")
+    check("a FAIL row is a blocking exit code",
+          preflight.exit_code([(preflight.PASS, "a", ""),
+                               (preflight.FAIL, "b", "")]) == 1)
+    check("a WARN row is not", preflight.exit_code(
+        [(preflight.PASS, "a", ""), (preflight.WARN, "b", "")]) == 0)
+    import socket
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("127.0.0.1", 0))
+        s.listen(1)
+        held = s.getsockname()[1]
+        check("a port already in use is detected",
+              not preflight._port_free("127.0.0.1", held))
+
+    vitals.BROADCAST = None
+
+
 def main() -> int:
     p = argparse.ArgumentParser()
     p.add_argument("--quiet", action="store_true")
@@ -371,6 +505,7 @@ def main() -> int:
     scenario(a.quiet)
     reconnect_scenario(a.quiet)
     stage_scenario(a.quiet)
+    trace_scenario(a.quiet)
     print()
     if _fails:
         print(f"\033[31m{len(_fails)} check(s) failed:\033[0m " + "; ".join(_fails))

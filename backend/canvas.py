@@ -31,14 +31,29 @@ COOLDOWN_S = 6.0        # per-key debounce; one long sentence must not update th
 FORM_LOCK_S = float(__import__("os").getenv("FORM_LOCK", "12.0"))
 FOCUS_THROTTLE_S = 3.5  # camera moves per second budget, or the room gets seasick
 
-# These MIRROR frontend/stage.js. The stage retires a scene after LIFETIME with no
-# refresh, and retires the oldest once MAX_LIVE are up. If we do not mirror that, the
-# manifest tells the model that things are on screen which the audience can no longer
-# see — and the whole point of the manifest is that it is the truth. A block.update
-# refreshes the stage's timer, so an actively discussed topic stays alive on both
-# sides. Keep these two numbers in step with stage.js.
+# What the stage can hold. The stage retires a scene after LIFETIME with no refresh,
+# and retires the oldest once MAX_LIVE are up. If we do not mirror that, the manifest
+# tells the model that things are on screen which the audience can no longer see —
+# and the whole point of the manifest is that it is the truth.
+#
+# These were once hand-copied constants with a comment asking the next person to keep
+# them in step with stage.js. They drifted: this said 3 while the stage showed 1, so
+# the model spent its calls revising two cards nobody could see. The stage now
+# announces its own policy on connect (`cmd: "hello"`) and owns the number; these are
+# only the defaults for a client too old to say.
 STAGE_LIFETIME_S = 26.0
-STAGE_MAX_LIVE = 3
+STAGE_MAX_LIVE = 1
+
+
+def set_stage_policy(max_live: int | None, lifetime_ms: float | None) -> dict:
+    """Adopt the policy the display reports. One owner for the number, so it cannot
+    drift out of step again."""
+    global STAGE_MAX_LIVE, STAGE_LIFETIME_S
+    if max_live is not None:
+        STAGE_MAX_LIVE = max(1, min(12, int(max_live)))
+    if lifetime_ms is not None:
+        STAGE_LIFETIME_S = max(2.0, min(600.0, float(lifetime_ms) / 1000.0))
+    return {"max_live": STAGE_MAX_LIVE, "lifetime_s": STAGE_LIFETIME_S}
 
 _COL_PITCH = 1200       # wide enough that a branch never collides with the next column
 _COL_BASE = -220        # centres a standard 440-wide block on the origin

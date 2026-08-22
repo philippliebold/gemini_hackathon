@@ -25,6 +25,7 @@ import numpy as np
 import mics
 import ops
 import runtime
+import vitals
 from config import CFG
 
 import os
@@ -130,6 +131,8 @@ class LocalEar:
         self._spec = False        # a speculative draw already went out for this one
         self.utterances = 0
         self._ready = False
+        self._fails = 0           # consecutive transcribe failures; 3 means re-warm
+        vitals.STATE["ear_model"] = MODEL
 
     # --- called from the audio queue (hot path: must stay trivial) ----------
     def feed(self, pcm: bytes) -> None:
@@ -165,25 +168,58 @@ class LocalEar:
             initial_prompt=VOCAB)
         return (r.get("text") or "").strip()
 
-    async def warm(self) -> None:
-        """Load the model before the talk starts; the first call is otherwise slow."""
+    async def warm(self) -> bool:
+        """Load the model before the talk starts; the first call is otherwise slow.
+
+        Returns whether the ear is usable, and says so in the vitals either way.
+        This used to swallow the exception and leave `_ready` false, which meant a
+        missing Whisper model produced a permanently blank screen and one line in a
+        terminal — the single worst failure this project has, because it is
+        indistinguishable from a quiet room.
+        """
+        vitals.STATE["ear"] = "warming"
+        t0 = time.time()
         try:
-            t0 = time.time()
             await self._transcribe(np.zeros(16000, dtype=np.float32))
-            self._ready = True
-            print(f"[ear] local transcription ready ({MODEL}) in {time.time()-t0:.1f}s")
         except Exception as e:                       # noqa: BLE001
+            self._ready = False
+            vitals.STATE["ear"] = "dead"
+            vitals.STATE["ear_error"] = f"{type(e).__name__}: {e}"[:200]
             print(f"[ear] local transcription unavailable: {type(e).__name__}: {e}")
+            vitals.trace("ear", "error", f"{MODEL} failed to load",
+                         detail=f"{type(e).__name__}: {e}"[:160])
+            return False
+        self._ready = True
+        self._fails = 0
+        vitals.STATE["ear"] = "ready"
+        vitals.STATE["ear_error"] = None
+        took = time.time() - t0
+        print(f"[ear] local transcription ready ({MODEL}) in {took:.1f}s")
+        vitals.trace("ear", "ok", f"{MODEL} ready", ms=took * 1000)
+        return True
+
+    async def _rewarm(self) -> None:
+        """Keep trying to get an ear. A dead ear is not a state the talk can
+        continue in, so retry with backoff and keep saying so on screen rather than
+        returning out of the loop and leaving the stage silent forever."""
+        delay = 2.0
+        while not await self.warm():
+            self.broadcast(ops.status(
+                "error", f"transcription unavailable — retrying in {delay:.0f}s"))
+            await asyncio.sleep(delay)
+            delay = min(30.0, delay * 2)
 
     async def loop(self) -> None:
-        await self.warm()
-        if not self._ready:
-            return
+        await self._rewarm()
         while True:
             await asyncio.sleep(TICK_S)
             if not runtime.listening():
                 if self._samples:
+                    secs = self._samples / CFG.sample_rate
                     self._reset()          # drop anything captured while stopped
+                    vitals.trace("ear", "drop", "stopped (Stop is on)",
+                                 detail=f"{secs:.1f}s of audio discarded",
+                                 throttle=2.0)
                 continue
             if not self._samples:
                 continue
@@ -203,12 +239,24 @@ class LocalEar:
                 keep = int(len(audio) - (quiet - FINAL_GAP_S / 2) * CFG.sample_rate)
                 if 0 < keep < len(audio):
                     audio = audio[:keep]
+                t_start = time.time()
                 try:
                     text = await self._transcribe(audio)
                 except Exception as e:               # noqa: BLE001
                     print(f"[ear] {type(e).__name__}: {e}")
                     self._reset()
+                    self._fails += 1
+                    vitals.trace("ear", "error", "transcribe failed",
+                                 detail=f"{type(e).__name__}: {e}"[:160])
+                    # Three in a row is not a bad clip, it is a broken ear. Reload
+                    # the model rather than fail silently on every utterance.
+                    if self._fails >= 3:
+                        print("[ear] 3 failures in a row — reloading the model")
+                        self._fails = 0
+                        await self._rewarm()
                     continue
+                self._fails = 0
+                took_ms = (time.time() - t_start) * 1000
                 # Mid-thought: they paused for breath, not for a full stop. Keep
                 # the audio and let them finish. MAX_UTTERANCE_S is the backstop,
                 # so a thought that never lands still reaches the screen.
@@ -216,15 +264,27 @@ class LocalEar:
                     self._held = self._samples
                     self._interim_text = text
                     self.broadcast(ops.status("listening", text))
+                    vitals.trace("ear", "hold", f"EAR_HOLD_MAX {HOLD_MAX_S}s",
+                                 text=text, ms=took_ms,
+                                 detail="thought unfinished — letting them finish")
                     continue
                 spec = self._spec          # read before _reset clears it
                 self._reset()
                 if not text:
+                    vitals.trace("ear", "drop", "empty transcript", ms=took_ms,
+                                 detail=f"{secs:.1f}s of audio, no words")
                     continue
                 if _invented(text):
                     print(f"[ear] {secs:.1f}s dropped (invented) -> {text[:60]!r}")
+                    vitals.trace("ear", "drop", "invented (silence artefact)",
+                                 text=text, ms=took_ms,
+                                 detail=f"{secs:.1f}s — Whisper filled in silence")
                     continue
                 self.utterances += 1
+                vitals.trace("ear", "ok",
+                             "utterance" + (" (refine)" if spec else ""),
+                             text=text, ms=took_ms, detail=f"{secs:.1f}s of audio",
+                             count="heard")
                 print(f"[ear] {secs:.1f}s ->{' (refine)' if spec else ''} "
                       f"{text[:90]!r}")
                 self.broadcast(ops.status("listening", text))
@@ -242,7 +302,10 @@ class LocalEar:
                 self._last_interim = time.time()
                 try:
                     text = await self._transcribe(self._audio())
-                except Exception:                    # noqa: BLE001
+                except Exception as e:               # noqa: BLE001
+                    vitals.trace("ear", "error", "interim transcribe failed",
+                                 detail=f"{type(e).__name__}: {e}"[:160],
+                                 throttle=5.0)
                     continue
                 if not text or text == self._interim_text:
                     continue
@@ -259,6 +322,11 @@ class LocalEar:
                     self.utterances += 1
                     print(f"[ear] {secs:.1f}s (sentence)"
                           f"{' (refine)' if spec else ''} -> {text[:80]!r}")
+                    vitals.trace("ear", "ok",
+                                 f"closed sentence (EAR_SENTENCE_WORDS "
+                                 f"{SENTENCE_MIN_WORDS})",
+                                 text=text, detail=f"{secs:.1f}s, still talking",
+                                 count="heard")
                     if self.brain is not None:
                         self.brain.feed(text, complete=True, refine=spec)
                     if self.memory is not None:
@@ -275,4 +343,8 @@ class LocalEar:
                         and not _invented(text)):
                     self._spec = True
                     print(f"[ear] {secs:.1f}s (early) -> {text[:70]!r}")
+                    vitals.trace("ear", "ok",
+                                 f"speculative draw (EAR_SPEC_WORDS "
+                                 f"{SPEC_MIN_WORDS})",
+                                 text=text, detail="mid-sentence, will be refined")
                     self.brain.feed(text, complete=True)

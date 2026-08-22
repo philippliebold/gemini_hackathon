@@ -18,6 +18,7 @@ import sys
 import numpy as np
 import sounddevice as sd
 
+import vitals
 from config import CFG
 
 
@@ -31,7 +32,13 @@ def offer(queue: asyncio.Queue, item) -> None:
     try:
         queue.put_nowait(item)
     except asyncio.QueueFull:
-        pass
+        # Dropping audio is the one failure the room hears as "it just missed
+        # that sentence", so it has to be countable. Throttled hard: a backed-up
+        # queue drops 50 frames a second.
+        vitals.trace("mic", "drop", "audio queue full",
+                     detail="capture is running behind — stale audio is worse "
+                            "than a gap",
+                     throttle=2.0, count="audio.dropped")
 
 
 async def mic_chunks(queue: asyncio.Queue, device: int | None = None,

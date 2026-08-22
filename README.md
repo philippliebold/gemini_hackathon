@@ -33,8 +33,23 @@ That's the whole frontend development loop. You never need the Gemini side.
 ```bash
 cp .env.example .env        # put your GEMINI_API_KEY in it
 source .venv/bin/activate
+python backend/main.py --check      # is this machine and this key ready?
 python backend/main.py --devices    # find your mic
 python -u backend/main.py           # then talk
+```
+
+**Run `--check` before every rehearsal.** It takes five seconds and tells you which
+of the six things that have each cost a real run is wrong this time: a key with no
+billing, a Whisper model that was never downloaded, a microphone the OS never
+granted permission to, a port still held by a backend from twenty minutes ago. All
+of those look identical from the stage — a screen that does nothing.
+
+```
+  ✓ PASS  GEMINI_API_KEY                      set (53 chars)
+  ✓ PASS  Gemini text model                   gemini-3.7-flash (primary) in 1.4s
+  ✓ PASS  Whisper (the default ear)           whisper-small-mlx loaded in 2.6s
+  ✓ PASS  Audio input devices                 5 found, default: AirPods Pro
+  ! WARN  WebSocket port                      127.0.0.1:8765 in use — is a backend already running?
 ```
 
 Frontend is the same: `cd frontend && python3 -m http.server 5173`. Open
@@ -48,6 +63,43 @@ terminal it is line-buffered and you can leave `-u` off.
 The default ear is **local Whisper**, not the Live API — see "Two ears" below. So
 `gemini-3.7-flash` is always the thing deciding what to draw, and the brain is on
 from the first sentence.
+
+## The console: what is happening, and why it stayed quiet
+
+<http://localhost:5173/console.html> — open it in a second window, on the laptop
+screen, while the room watches the projector.
+
+The stage is deliberately a bad debugging surface: it shows five status words and a
+caption, which is not enough vocabulary for a system with twenty distinct ways to
+stay quiet. From the stage, a dead Whisper model, an exhausted quota, a per-key
+cooldown and the model simply choosing silence all look the same — nothing
+happening. The console is where the difference lives.
+
+**Vitals**, once a second: is the ear `ready`, `warming` or `dead`; which model is
+actually answering and whether it is a fallback; how far behind the audio queue is
+and whether it has dropped anything; event-loop lag; how many blocks the room can
+see.
+
+**The trace log** is the main thing. One line per decision, newest first, filterable
+by stage or down to problems only. Every reason names the constant that made the
+call *and its value*, because the next question is always which knob to turn:
+
+```
+20:43:35  brain  OK     chose show_stat  1.20 s
+                        "we spend forty one thousand a month on inference"
+20:43:35  tool   OK     show_stat → add
+20:43:31  tool   BLOCK  cooldown 6.0s on 'pricing'
+20:42:06  mic    DROP   below MIC_GATE 0.014  ×151
+                        AirPods Pro at 0.0000 — drag Sensitivity left if this is your voice
+```
+
+That last line is the one that earns the page. A silent screen with a mic reading
+0.0000 is a permissions dialog nobody clicked, and it is indistinguishable from a
+broken pipeline until something says so.
+
+The console also carries the controls — Stop, Clear, Reset, input device,
+Sensitivity — so the stage can stay a clean surface for the room. It never renders a
+block: if you want to see what the audience sees, look at the audience's screen.
 
 ## Controls
 
@@ -162,6 +214,26 @@ Each of these cost a real run to learn. Keep them.
   `runtime.LISTENING` gates every caller and `Brain.abort()` cancels what is already
   running. Caveat, and it is a real one: `gemini_live.py` does **not** consult
   `runtime`, so under `--live` the Stop button does not stop the audio stream.
+- **Two constants "kept in step by hand" drifted, and the model paid for it.**
+  `canvas.py` mirrored the stage's capacity so the manifest it hands the model is
+  true, with a comment asking the next person to keep the numbers matching
+  `stage.js`. They did not: the backend believed three scenes were up while the room
+  saw one, so the model spent its calls revising two cards nobody could see. The
+  display now announces its own policy on connect (`cmd: "hello"`) and owns the
+  number. **A comment is not a mechanism.** If two files must agree, one of them has
+  to be told.
+- **A cancelled task is not an exception you can ignore.** `_guarded()` caught
+  `TimeoutError` and `Exception`, which does not include `asyncio.CancelledError` —
+  so pressing Stop mid-decision left `thinking` on screen permanently. The pipeline
+  looked hung at exactly the moment it had obeyed you.
+- **Twenty ways to stay quiet and five words to say so.** Every stage of the
+  pipeline can decide not to draw, and almost none of them said which: the queue
+  filling, the mic gate, the utterance floor, the invention guard, the salience
+  check, the cooldown, the form lock, a failed image left spinning forever. All of
+  it went to a terminal nobody reads during a talk. That is the whole reason for
+  `vitals.py`, the `trace` op and `console.html` — and the first thing the console
+  showed on its first run was a microphone delivering `0.0000`, which had been
+  indistinguishable from a working system in a quiet room.
 
 ## Rehearsing without a mic
 
@@ -201,11 +273,17 @@ hot path.
 ### Test it without a mic or an API key
 
 ```bash
-python backend/replay.py          # 44 checks: growth, branching, merging, reconnect
+python backend/replay.py          # 69 checks: growth, branching, merging, reconnect,
+                                  # and that every silent drop says why
 ```
 
 Scripted tool calls straight through the real dispatcher. A talk takes 90 seconds
 to rehearse; this takes one. Run it after touching `canvas.py` or `tools.py`.
+
+Checks 17–26 are the diagnostic half: a cooldown, a refused form change, an unknown
+tool and a failed asset must each leave a trace that names the rule and its value,
+the trace flood-throttle must coalesce rather than swallow, and a preflight failure
+must produce a non-zero exit rather than a shrug.
 
 To watch a card actually grow in the browser (`demo.jsonl` has no `block.update`
 frames, so it cannot show this):
@@ -234,8 +312,11 @@ Neither team touches the other's directory.
 | `backend/memory.py` | backend | Rolling topic memory on 3.7-flash. Reconnect brief, recall |
 | `backend/replay.py` | backend | Offline harness. No mic, no key, no network |
 | `backend/server.py` | backend | WebSocket fan-out |
+| `backend/vitals.py` | backend | **Why the screen stayed blank.** One trace per decision, plus the vitals |
+| `backend/preflight.py` | backend | `--check`. Is this machine and this key ready |
 | `frontend/stage.js` | frontend | Scene lifecycle, one renderer per block type, WS client |
 | `frontend/dock.js` | frontend | Control dock: mics, speaker, notes, presenter commands |
+| `frontend/console.*` | frontend | The operator console: vitals, trace log, controls |
 | `frontend/stage.css`, `frontend/dock.css` | frontend | Look and feel |
 | `CONTRACT.md`, `shared/` | everyone reads, nobody edits alone | |
 

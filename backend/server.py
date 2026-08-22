@@ -1,6 +1,7 @@
 """WebSocket fan-out. Frontend connects here; every frame goes to every client."""
 import asyncio
 import json
+from collections import deque
 
 import websockets
 
@@ -8,6 +9,7 @@ import canvas
 import mics
 import ops
 import runtime
+import vitals
 from config import CFG
 
 # Set by main.py. Lets the screen drive the mics without server.py importing the
@@ -18,13 +20,28 @@ CLIENTS: set = set()
 HISTORY: list[dict] = []   # replay to late joiners so a refresh never loses the canvas
 MAX_HISTORY = 500
 
+# Diagnostics live in their own ring, not in HISTORY: a talk produces far more
+# traces than blocks, and replaying them to the stage would evict the canvas. The
+# console asks for this backlog by name when it connects.
+TRACES: deque = deque(maxlen=400)
+# The last status frame, replayed on connect. Status is deliberately kept out of
+# HISTORY (it is not part of the canvas), which meant a refresh mid-thought left the
+# screen with no idea what the pipeline was doing.
+LAST_STATUS: dict | None = None
+
 
 def broadcast(frame: dict) -> None:
     """Sync-callable from anywhere. Fire and forget."""
-    if frame["op"] != "status":
+    global LAST_STATUS
+    op = frame["op"]
+    if op == "trace":
+        TRACES.append(frame)
+    elif op == "status":
+        LAST_STATUS = frame
+    elif op != "health.state":
         HISTORY.append(frame)
         del HISTORY[:-MAX_HISTORY]
-    if frame["op"] == "canvas.clear":
+    if op == "canvas.clear":
         HISTORY.clear()
         HISTORY.append(frame)
     msg = ops.dumps(frame)
@@ -73,6 +90,36 @@ def push_mics() -> None:
         print(f"[ws] mics.state failed: {e}")
 
 
+def health_payload() -> dict:
+    """The pipeline's vital signs. Everything the console needs to answer "is this
+    thing alive, and which model is answering?" without reading a terminal."""
+    p = vitals.snapshot(listening=runtime.listening(),
+                        blocks=len(canvas.BLOCKS))
+    brain = CONTROL.get("brain")
+    ear = CONTROL.get("ear")
+    p["ear"]["kind"] = ear
+    # The local ear is the only one whose readiness we track; under --live the Live
+    # session is the ear and its state is the session's, not Whisper's.
+    if ear == "live":
+        p["ear"]["state"] = "live-api"
+    if brain is not None:
+        p["brain"]["enabled"] = bool(brain.enabled)
+        p["brain"]["inflight"] = brain.inflight
+        p["brain"]["calls"] = brain.calls
+    p["stage"] = {"max_live": canvas.STAGE_MAX_LIVE,
+                  "lifetime_s": canvas.STAGE_LIFETIME_S}
+    p["clients"] = len(CLIENTS)
+    return p
+
+
+def push_health() -> None:
+    """Broadcast the vitals. Safe to call from anywhere; never raises."""
+    try:
+        broadcast(ops.health(health_payload()))
+    except Exception as e:                                # noqa: BLE001
+        print(f"[ws] health.state failed: {e}")
+
+
 async def handler(ws):
     CLIENTS.add(ws)
     print(f"[ws] client connected ({len(CLIENTS)} total)")
@@ -82,6 +129,11 @@ async def handler(ws):
         # A late joiner needs the join code immediately, not on the next change.
         if CONTROL:
             await ws.send(ops.dumps(ops.mics_state(mics_payload())))
+            await ws.send(ops.dumps(ops.health(health_payload())))
+        # A refresh mid-thought should not leave the screen guessing what the
+        # pipeline is doing.
+        if LAST_STATUS is not None:
+            await ws.send(ops.dumps(LAST_STATUS))
         # NOTE: a client that sends a command *during* the replay above can have it
         # dropped if it disconnects mid-send. The display holds its socket open, so
         # this only bites short-lived scripted clients.
@@ -92,11 +144,33 @@ async def handler(ws):
                 continue
             if msg.get("cmd") == "presenter":
                 await on_presenter(msg.get("action"))
+            elif msg.get("cmd") == "hello":
+                await on_hello(ws, msg)
     except websockets.ConnectionClosed:
         pass
     finally:
         CLIENTS.discard(ws)
         print(f"[ws] client gone ({len(CLIENTS)} left)")
+
+
+async def on_hello(ws, msg: dict) -> None:
+    """A client introducing itself.
+
+    The stage reports how many scenes it can hold and how long one lives, so
+    canvas.py stops guessing. The console asks for the diagnostic backlog, which
+    the stage has no use for.
+    """
+    role = msg.get("role")
+    if role == "stage":
+        policy = canvas.set_stage_policy(msg.get("max_live"),
+                                         msg.get("lifetime_ms"))
+        print(f"[ws] stage holds {policy['max_live']} scene(s) for "
+              f"{policy['lifetime_s']:.0f}s — manifest mirrors it")
+    elif role == "console":
+        for frame in list(TRACES):
+            await ws.send(ops.dumps(frame))
+        await ws.send(ops.dumps(ops.health(health_payload())))
+        print("[ws] console attached")
 
 
 def _silence_mac_mic(why: str) -> None:
@@ -148,6 +222,9 @@ async def on_presenter(action: str | None) -> None:
         # to anything, it just makes the screen go permanently blank.
         if action == "brain_off" and CONTROL.get("ear") == "local":
             print("[brain] refused: local ears have no other way to draw")
+            vitals.trace("brain", "block", "cannot switch the brain off",
+                         detail="local ears have no other way to draw, so this "
+                                "would only blank the screen")
             push_mics()
             return
         await brain.set_enabled(action == "brain_on")
@@ -190,12 +267,18 @@ async def on_presenter(action: str | None) -> None:
         push_mics()
     elif action in ("listen_on", "listen_off"):
         runtime.set_listening(action == "listen_on")
+        cancelled = 0
         if action == "listen_off":
             brain = CONTROL.get("brain")
             if brain is not None:
-                brain.abort()          # stop means stop, including work in flight
+                cancelled = brain.abort()   # stop means stop, including work in flight
+        vitals.trace("mic", "ok",
+                     "listening" if runtime.listening() else "stopped",
+                     detail=(f"cancelled {cancelled} call(s) in flight"
+                             if cancelled else None))
         broadcast(ops.status("listening" if runtime.listening() else "idle"))
         push_mics()
+        push_health()
     elif action == "context_reset":
         # Full reset: the board, the running record, and the model's recent lines.
         # Rehearsing the same script three times otherwise has it reasoning about
@@ -208,10 +291,17 @@ async def on_presenter(action: str | None) -> None:
         brain = CONTROL.get("brain")
         if brain is not None:
             brain.clear()
+        # The counters describe this take. Carrying them across a reset makes the
+        # console lie about the rehearsal you are actually watching.
+        vitals.reset()
+        TRACES.clear()
         push_mics()
+        push_health()
         print("[ws] context reset by the presenter")
     elif action == "mics_refresh":
         push_mics()
+    elif action == "health_refresh":
+        push_health()
     # TODO: pause / resume
 
 

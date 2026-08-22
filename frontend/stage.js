@@ -76,7 +76,11 @@ const SCENE = {
               onerror="this.dataset.broken=1;this.closest('.shot').classList.add('failed')">
          ${d.caption ? `<div class="cap">${esc(d.caption)}</div>` : ""}
        </div>`
-    : `<div class="loading"></div>`,
+    /* A placeholder that never fills is worse than an honest gap: the room ends up
+       watching a spinner for the rest of the talk. Say it did not arrive. */
+    : d.failed
+      ? `<div class="asset-failed">${esc(d.failed)}</div>`
+      : `<div class="loading"></div>`,
 
   /* The fixture ships a YOUR_MAPS_KEY placeholder so no key lands in the
      repo. Pass a real one for a local demo: ?mapskey=... */
@@ -92,7 +96,9 @@ const SCENE = {
       <div class="t-sub" style="margin-top:1.6vh">
         <b style="color:#F4F8FF">${esc(d.duration || "")}</b>
         &nbsp;·&nbsp;${esc(d.distance || "")} ${esc(d.mode || "")}
-      </div>` : ""}`,
+      </div>` : d.failed
+      ? `<div class="asset-failed" style="margin-top:1.6vh">${esc(d.failed)}</div>`
+      : ""}`,
 
   math: (d) => `
     ${d.title ? `<div class="t-kicker">${esc(d.title)}</div>` : ""}
@@ -393,7 +399,17 @@ function closeWs() {
 function connect() {
   closeWs();
   ws = new WebSocket(WS_URL);
-  ws.onopen = () => setStatus({ state: "listening" });
+  ws.onopen = () => {
+    setStatus({ state: "listening" });
+    /* The stage owns how many scenes fit and how long one lives; the backend has
+       to mirror it or the manifest it hands the model claims things are on screen
+       that the room can no longer see. Announce it instead of asking the next
+       person to keep two constants in step by hand. */
+    try {
+      ws.send(JSON.stringify({ v: 1, cmd: "hello", role: "stage",
+                               max_live: MAX_LIVE, lifetime_ms: LIFETIME }));
+    } catch (e) { /* the socket can close between open and here */ }
+  };
   ws.onmessage = (e) => { try { handle(JSON.parse(e.data)); } catch (err) {} };
   ws.onclose = () => {
     if (mode !== "live") return;

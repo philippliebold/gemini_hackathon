@@ -276,6 +276,17 @@ html, body {
 }
 @keyframes sh { to { background-position: -200% 0 } }
 
+/* An asset that never arrived. Deliberately quiet — it is an admission, not a
+   headline — but it replaces the shimmer, because a placeholder that spins for the
+   rest of the talk tells the room the machine is broken. */
+.asset-failed {
+  display: flex; align-items: center; justify-content: center;
+  min-height: 12vh; padding: 22px 26px; border-radius: 20px;
+  border: 1px dashed rgba(242,139,130,.42);
+  background: rgba(242,139,130,.07);
+  font-size: clamp(12px, .95vw, 17px); color: #F5B7B1; text-align: center;
+}
+
 /* ── Table / list inside glass ──────────────────────────────────────── */
 
 .rows { width: 100%; border-collapse: collapse; }

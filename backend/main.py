@@ -1,6 +1,7 @@
 """The real thing: mics -> Gemini Live -> WebSocket.
 
     python backend/main.py                  # local Whisper ear + Gemini brain (default)
+    python backend/main.py --check          # preflight: key, models, ear, mics, ports
     python backend/main.py --live           # Gemini Live API as the ear instead
     python backend/main.py --devices        # list input devices, then exit
     python backend/main.py --device 2       # pick the Mac's input
@@ -28,6 +29,7 @@ import ops
 import server
 import speaker as speaker_mod
 import tools
+import vitals
 from config import CFG
 
 
@@ -58,8 +60,12 @@ async def loop_watchdog(threshold_s: float = 0.25) -> None:
         t0 = _t.perf_counter()
         await asyncio.sleep(0.5)
         lag = _t.perf_counter() - t0 - 0.5
+        vitals.STATE["loop_lag_ms"] = max(0.0, lag * 1000)
         if lag > threshold_s:
             print(f"[loop] stalled {lag*1000:.0f} ms — this can kill the Live session")
+            vitals.trace("mic", "error", f"event loop stalled {lag*1000:.0f} ms",
+                         detail="a blocked loop and a bad network look identical "
+                                "from the outside", throttle=5.0)
 
 
 def qr_svg(url: str) -> str | None:
@@ -78,6 +84,21 @@ def qr_svg(url: str) -> str | None:
     except Exception as e:                               # noqa: BLE001
         print(f"[mic] no QR ({e}); the URL still works")
         return None
+
+
+async def health_ticker(q: asyncio.Queue) -> None:
+    """Push the vitals to whoever is watching.
+
+    A talk is the wrong time to be reading a terminal, so everything that used to
+    only be a log line — is the ear alive, which model is answering, how far behind
+    the audio queue is — goes on the wire once a second instead.
+    """
+    while True:
+        await asyncio.sleep(1.0)
+        vitals.STATE["audio_queued"] = q.qsize()
+        vitals.STATE["audio_capacity"] = q.maxsize
+        if server.CLIENTS:
+            server.push_health()
 
 
 async def roster_ticker(floor: mics.Floor) -> None:
@@ -100,8 +121,12 @@ async def main(args):
 
     # let slow tools (image generation) push their second frame
     tools.BROADCAST = server.broadcast
+    # ...and let every stage of the pipeline say why it stayed quiet. Installed the
+    # same way, so nothing on the audio hot path has to import server.
+    vitals.BROADCAST = server.broadcast
 
     q: asyncio.Queue = asyncio.Queue(maxsize=200)
+    vitals.STATE["audio_capacity"] = q.maxsize
     floor = mics.Floor()
 
     mem = memory_mod.TopicMemory()
@@ -173,6 +198,8 @@ async def main(args):
         if args.brain:
             await brain.set_enabled(True)
 
+    tasks.append(health_ticker(q))
+
     if args.pcm:
         # One voice, but still through the floor: that is what produces the turn
         # boundaries the Live model needs in order to respond at all.
@@ -203,6 +230,9 @@ async def main(args):
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--devices", action="store_true")
+    p.add_argument("--check", action="store_true",
+                   help="preflight: API key, models, Whisper, input devices, "
+                        "ports. Prints pass/fail and exits")
     p.add_argument("--device", type=int, default=None)
     p.add_argument("--pcm", type=str, default=None)
     p.add_argument("--no-phones", action="store_true",
@@ -226,6 +256,9 @@ if __name__ == "__main__":
     if a.devices:
         print(audio.list_devices())
         sys.exit(0)
+    if a.check:
+        import preflight
+        sys.exit(preflight.main())
     try:
         asyncio.run(main(a))
     except KeyboardInterrupt:

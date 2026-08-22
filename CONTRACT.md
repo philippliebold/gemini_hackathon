@@ -231,7 +231,56 @@ The running record — the thing that remains after the talking stops.
 
 ---
 
-## Client → Server (the only upstream message)
+## Diagnostic ops (added after the freeze)
+
+Neither is ever a block, and the stage ignores both. They exist because every stage
+of the pipeline can decide **not** to draw, and until these were on the wire the
+only place that said so was a terminal — which made a dead Whisper model, an
+exhausted quota, a per-key cooldown and "the model chose silence" all look identical
+from the screen. `frontend/console.html` is the client for them.
+
+### `trace`
+```json
+{ "stage": "brain", "verdict": "skip",
+  "reason": "not worth asking (MIN_CHARS 18, BRAIN_MIN_CONTENT 2)",
+  "text": "so anyway", "detail": "no API call made", "ms": 12.4, "n": 1 }
+```
+One event per decision, emitted through `backend/vitals.py`.
+
+| Field | |
+|---|---|
+| `stage` | `mic` \| `ear` \| `brain` \| `tool` \| `canvas` \| `asset` |
+| `verdict` | `ok` \| `hold` \| `skip` \| `drop` \| `block` \| `error` |
+| `reason` | Names the constant that made the call **and its value**, because the next question is always which knob to turn |
+| `text` | The transcript line this decision was about, when there is one |
+| `detail` | A sentence of context, in plain language |
+| `ms` | How long the thing took, when it took time |
+| `n` | Present and >1 when identical events were coalesced — high-frequency callers are throttled rather than allowed to flood the socket |
+
+Traces are kept out of the replay `HISTORY` (a talk produces far more of them than
+blocks, and replaying them to the stage would evict the canvas). The backend holds
+the last 400 and sends them to a client that introduces itself as the console.
+
+### `health.state`
+```json
+{ "ear": { "state": "ready", "model": "mlx-community/whisper-small-mlx",
+           "error": null, "kind": "local" },
+  "brain": { "model": "gemini-3.7-flash", "fallback": false, "error": null,
+             "enabled": true, "inflight": 0, "calls": 12 },
+  "listening": true,
+  "audio": { "queued": 0, "capacity": 200, "dropped": 0 },
+  "loop_lag_ms": 1.2, "blocks": 1,
+  "stage": { "max_live": 1, "lifetime_s": 26.0 },
+  "clients": 2, "counts": { "ear.ok": 8, "brain.skip": 3, "tool.ok": 5 } }
+```
+Pushed once a second while any client is attached. `ear.state` is `warming` /
+`ready` / `dead` / `off`, or `live-api` under `--live`. `counts` is a running tally
+keyed `"<stage>.<verdict>"` plus the semantic counters (`heard`, `drawn`, `blocked`,
+`skipped`, `dropped`, `silent`, `audio.dropped`), and it resets on `context_reset`.
+
+---
+
+## Client → Server
 
 ```json
 { "v": 1, "cmd": "presenter", "action": "clear" }
@@ -254,9 +303,35 @@ set the backend answers today (`server.on_presenter`) is:
 | `speaker_on` / `speaker_off` / `speaker_device:<index>` | Play the phones through this Mac's output. Turning it on closes the Mac mic, because that pair is a feedback loop |
 | `brain_on` / `brain_off` | Hand the drawing decision to `gemini-3.7-flash`. Refused while the ear is local, since nothing else could draw |
 | `mics_refresh` | Ask for a fresh `mics.state` |
+| `health_refresh` | Ask for a fresh `health.state` |
 
 Unknown actions are ignored, so a frontend may send anything and an older backend
 simply will not act on it.
+
+### `hello` — a client introducing itself
+
+```json
+{ "v": 1, "cmd": "hello", "role": "stage", "max_live": 1, "lifetime_ms": 26000 }
+```
+
+Sent once on connect. Optional: an older client that never sends it gets the
+defaults.
+
+| Field | |
+|---|---|
+| `role` | `"stage"` (the display) or `"console"` (the operator page) |
+| `max_live` | How many scenes the display can hold at once |
+| `lifetime_ms` | How long a scene lives without being refreshed |
+
+**The display owns those two numbers and the backend mirrors them.** `canvas.py`
+hands the model a manifest of what is on screen, and that manifest is only worth
+anything if it is true — these used to be constants copied by hand into both
+codebases with a comment asking the next person to keep them in step, and they
+drifted: the backend believed three scenes were up while the room saw one, so the
+model spent its calls revising cards nobody could see.
+
+A `console` role gets the recent `trace` backlog on connect; the stage does not,
+because it has no use for it.
 
 ---
 

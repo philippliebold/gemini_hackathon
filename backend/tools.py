@@ -18,6 +18,7 @@ import time
 
 import canvas
 import ops
+import vitals
 from config import CFG
 
 # Set once by main.py so slow tools (image generation) can push a second
@@ -33,11 +34,21 @@ BROADCAST = None
 _REFINE = False
 
 
+def _asset_failed(block_id: str, why: str, detail: str | None = None) -> None:
+    """A placeholder that never fills is worse than an honest gap: the room watches
+    a spinner for the rest of the talk, and the operator has no idea whether the
+    asset is slow or gone. Say it failed, on screen and in the trace log."""
+    vitals.trace("asset", "error", why, detail=detail or f"block {block_id}")
+    if BROADCAST:
+        BROADCAST(ops.block_update(block_id, {"failed": why}))
+
+
 async def _generate_image(block_id: str, prompt: str) -> None:
     """Fill an image placeholder. Takes ~12s, so it must never block the
     live audio loop -- it runs as a detached task and updates in place."""
     if not BROADCAST or not CFG.api_key:
         return
+    t0 = time.time()
     try:
         from google import genai
         from google.genai import types as gt
@@ -55,9 +66,15 @@ async def _generate_image(block_id: str, prompt: str) -> None:
                 uri = (f"data:{blob.mime_type};base64,"
                        + base64.b64encode(blob.data).decode())
                 BROADCAST(ops.block_update(block_id, {"src": uri}))
+                vitals.trace("asset", "ok", "image generated",
+                             ms=(time.time() - t0) * 1000, detail=prompt[:80])
                 return
+        _asset_failed(block_id, "image generation returned no picture",
+                      detail=f"{CFG.image_model} answered with no image part")
     except Exception as exc:                      # never kill the session
         print(f"[image] {type(exc).__name__}: {exc}")
+        _asset_failed(block_id, "image generation failed",
+                      detail=f"{type(exc).__name__}: {exc}"[:160])
 
 def _decode_polyline(enc: str) -> list[list[float]]:
     """Google's encoded polyline -> [[lat, lng], ...]. ~15 lines beats a dependency."""
@@ -136,6 +153,8 @@ async def _fill_route(block_id: str, origin: str, destination: str,
         if not routes:
             err = (body.get("error") or {}).get("message", body)
             print(f"[route] no route: {str(err)[:130]}")
+            _asset_failed(block_id, "no route found",
+                          detail=str(err)[:160])
             return
         route = routes[0]
         secs = int(str(route.get("duration", "0s")).rstrip("s") or 0)
@@ -146,8 +165,12 @@ async def _fill_route(block_id: str, origin: str, destination: str,
             patch["polyline"] = _decode_polyline(enc)
         BROADCAST(ops.block_update(block_id, patch))
         print(f"[route] {origin} -> {destination}: {dur}, {dist}")
+        vitals.trace("asset", "ok", f"route {origin} → {destination}",
+                     detail=f"{dur}, {dist}")
     except Exception as exc:                      # never kill the session
         print(f"[route] {type(exc).__name__}: {exc}")
+        _asset_failed(block_id, "route lookup failed",
+                      detail=f"{type(exc).__name__}: {exc}"[:160])
 
 
 # --- the two params that make the board evolve ------------------------------
@@ -567,11 +590,16 @@ async def _find_photo(block_id: str, query: str) -> None:
             lic = meta.get("LicenseShortName", {}).get("value") or ""
             credit = " · ".join(x for x in (artist[:60], lic, "Wikimedia Commons") if x)
             BROADCAST(ops.block_update(block_id, {"src": thumb, "caption": credit}))
+            vitals.trace("asset", "ok", f"photo found for {query!r}",
+                         detail=credit)
             return
 
-        BROADCAST(ops.block_update(block_id, {"caption": f"no photo found: {query}"}))
+        _asset_failed(block_id, f"no photo found: {query}",
+                      detail="Wikimedia Commons returned nothing usable")
     except Exception as exc:                       # never kill the session
         print(f"[photo] {type(exc).__name__}: {exc}")
+        _asset_failed(block_id, "photo search failed",
+                      detail=f"{type(exc).__name__}: {exc}"[:160])
 
 
 def tool_show_photo(key: str, query: str | None = None, caption: str | None = None,
@@ -613,6 +641,7 @@ def dispatch(name: str, args: dict, refine: bool = False) -> tuple[list[dict], d
     global _REFINE
     fn = globals().get(f"tool_{name}")
     if fn is None:
+        vitals.trace("tool", "error", f"unknown tool {name}")
         return [], {"error": f"unknown tool {name}", "canvas": canvas.manifest()}
 
     args = dict(args or {})
@@ -631,6 +660,10 @@ def dispatch(name: str, args: dict, refine: bool = False) -> tuple[list[dict], d
                 args["key"] = f"{args['key']}-alt"
         if (not refine and not args.get("revises")
                 and not canvas.cooldown_ok(args["key"])):
+            vitals.trace("tool", "block",
+                         f"cooldown {canvas.COOLDOWN_S}s on '{args['key']}'",
+                         detail=f"{name} declined — that topic was just drawn",
+                         count="blocked")
             return [], {"skipped": "cooldown",
                         "reason": f"'{args['key']}' was just drawn; say something new "
                                   f"or wait before revisiting it",
@@ -638,8 +671,22 @@ def dispatch(name: str, args: dict, refine: bool = False) -> tuple[list[dict], d
     _REFINE = refine
     try:
         frames, result = fn(**args)
+        # Every caller — the brain, the local brain, the Live session — comes
+        # through here, so this is the one place that can honestly report whether a
+        # decision reached the screen.
+        if result.get("skipped"):
+            vitals.trace("tool", "block", f"{name}: {result['skipped']}",
+                         detail=result.get("reason"), count="blocked")
+        elif result.get("error"):
+            vitals.trace("tool", "error", f"{name}: {result['error']}",
+                         detail=f"key={args.get('key')}")
+        else:
+            vitals.trace("tool", "ok", f"{name} → {result.get('action')}",
+                         detail=f"key={args.get('key')}", count="drawn")
         return frames, result | {"canvas": canvas.manifest()}
     except Exception as e:  # noqa: BLE001 - on stage, degrade don't die
+        vitals.trace("tool", "error", f"{name} raised {type(e).__name__}",
+                     detail=str(e)[:160])
         return [], {"error": f"{type(e).__name__}: {e}", "canvas": canvas.manifest()}
     finally:
         _REFINE = False
