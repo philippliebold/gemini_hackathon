@@ -30,14 +30,12 @@ MAX_MICS = 4
 # Measured in this room over 40 s, from the live roster rather than guessed:
 #   room noise   0.0044 -> 0.0171
 #   real speech  0.0185 -> 0.0616
-# 0.013 sat INSIDE the noise band, which is why nonsense kept appearing on screen
-# ("Poking Out Ears", "pubg") with nobody talking. 0.021 clears the noise ceiling
-# with margin and still sits well under the quietest speech seen.
-#
-# Biased slightly low on purpose: too low draws on noise, which is visible and
-# fixable mid-demo; too high hears nothing and is indistinguishable from a broken
-# model. Re-measure in the venue with `python backend/mic_level.py`.
-GATE_RMS = float(os.getenv("MIC_GATE", "0.021"))
+# Those bands nearly touch, so this gate cannot cleanly separate them. It is set
+# LOW on purpose and only decides who *takes* the floor — once taken, audio flows
+# continuously (see accept()). A gate high enough to reject all noise also chops
+# the quiet parts out of real sentences, which is far worse: the model then hears
+# fragments and transcribes nothing.
+GATE_RMS = float(os.getenv("MIC_GATE", "0.014"))
 HANGOVER_S = 0.70       # holder keeps the FLOOR this long after going quiet
 TURN_SILENCE_S = 0.35   # ...but the TURN closes this early. See below.
 STEAL_MARGIN = 1.8      # a rival must be this much louder to interrupt
@@ -86,13 +84,17 @@ class Floor:
 
     def __init__(self, gate: float = GATE_RMS, hangover: float = HANGOVER_S,
                  steal_margin: float = STEAL_MARGIN,
-                 turn_silence: float = TURN_SILENCE_S) -> None:
+                 turn_silence: float = TURN_SILENCE_S,
+                 gate_turns: bool | None = None) -> None:
         self.mics: dict[str, Mic] = {}
         self.holder: str | None = None
         self.gate = gate
         self.hangover = hangover
         self.steal_margin = steal_margin
         self.turn_silence = turn_silence
+        # Only chop the stream into turns when WE drive the turn boundaries.
+        from config import CFG as _CFG
+        self.gate_turns = _CFG.manual_activity if gate_turns is None else gate_turns
         self.switches = 0
         self.announced: str | None = None
         self.turn_open = False
@@ -181,12 +183,20 @@ class Floor:
             return False, events
         quiet = now - mic.last_voice
         if self.turn_open and quiet > self.turn_silence:
-            # Let the tail of the word through, then hand the turn to the model.
+            # Close the *turn* (only meaningful in manual mode).
             events.append(("activity", "end"))
             self.turn_open = False
         if quiet > self.hangover:
             self.holder = None
-        return self.turn_open, events
+            return False, events
+
+        # Still holding the floor. KEEP FORWARDING unless we are the ones deciding
+        # turn boundaries. A speaking voice dips below any usable gate constantly —
+        # between words, on unstressed syllables — and cutting the stream at each
+        # dip hands the model shredded audio it cannot transcribe. When the model
+        # runs its own VAD (the default) it needs a continuous stream and finds the
+        # sentence ends itself; our job is only to pick whose mic to send.
+        return (self.turn_open if self.gate_turns else True), events
 
     # --- reads --------------------------------------------------------------
     def roster(self) -> list[dict]:

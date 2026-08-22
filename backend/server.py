@@ -41,6 +41,7 @@ def mics_payload() -> dict:
     """Everything the screen needs to show the join code and who is live."""
     floor = CONTROL.get("floor")
     mac = CONTROL.get("macmic")
+    brain = CONTROL.get("brain")
     devices = CONTROL.get("devices") or (lambda: [])
     return {
         "join_url": CONTROL.get("join_url"),
@@ -50,6 +51,8 @@ def mics_payload() -> dict:
         "devices": devices() if callable(devices) else devices,
         "mac": {"active": bool(mac and mac.active),
                 "device": mac.device if mac else None},
+        "brain": {"enabled": bool(brain and brain.enabled),
+                  "model": (brain.model if brain and brain.enabled else None)},
     }
 
 
@@ -111,6 +114,11 @@ async def on_presenter(action: str | None) -> None:
         mac = CONTROL.get("macmic")
         if mac is not None:
             mac.off()
+            push_mics()
+    elif action in ("brain_on", "brain_off"):
+        brain = CONTROL.get("brain")
+        if brain is not None:
+            await brain.set_enabled(action == "brain_on")
             push_mics()
     elif action == "mics_refresh":
         push_mics()

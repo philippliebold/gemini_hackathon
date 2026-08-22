@@ -30,6 +30,7 @@ const dock = {
   url:    document.getElementById("phone-url"),
   plive:  document.getElementById("phone-live"),
   pclose: document.getElementById("phone-close"),
+  brain:  document.getElementById("brain-btn"),
 };
 
 /* --- auto-hide: the presenter faces the room, so chrome shouldn't linger --- */
@@ -58,7 +59,15 @@ function onMics(p) {
     roster: p.roster || [],
     devices: p.devices || [],
     mac: p.mac || { active: false, device: null },
+    brain: p.brain || { enabled: false, model: null },
   };
+  if (dock.brain) {
+    const on = micState.brain.enabled;
+    dock.brain.classList.toggle("on", on);
+    dock.brain.title = on
+      ? `Drawing decided by ${micState.brain.model || "3.7-flash"} — click to hand it back to the live ear`
+      : "Let gemini-3.7-flash decide what to draw, instead of the live ear";
+  }
   MAX_MICS = p.max_mics || 4;
 
   if (p.join_url) {
@@ -170,6 +179,13 @@ addEventListener("keydown", (e) => {
   if (e.key === "Escape") togglePhone(false);
   if (e.key.toLowerCase() === "m" && !e.metaKey && !e.ctrlKey) pickMacDevice();
 });
+if (dock.brain) dock.brain.onclick = () => {
+  /* optimistic: the backend echoes the real state back on mics.state */
+  const next = !micState.brain.enabled;
+  dock.brain.classList.toggle("on", next);
+  window.sendPresenter(next ? "brain_on" : "brain_off");
+  poke();
+};
 window.CoDock = { onMics };
 dock.clear.onclick = () => { window.CoStage.clearAll(); window.sendPresenter("clear"); };
 

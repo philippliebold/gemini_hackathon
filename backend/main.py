@@ -89,7 +89,10 @@ async def main(args):
     # Off by default: the Live session calls the tools itself on a real mic.
     # --brain moves the decision to gemini-3.7-flash instead, which is the escape
     # hatch if live tool calling turns out flaky on stage. See brain.py.
-    brain = brain_mod.Brain(server.broadcast) if args.brain else None
+    # Always built, never enabled by default: the Live session calls the tools
+    # itself on a real mic. The screen can hand the decision to gemini-3.7-flash
+    # mid-talk if the ear turns out flaky.
+    brain = brain_mod.Brain(server.broadcast)
     # Survives every reconnect: holds the Live API resumption handle so a dropped
     # session comes back into the same conversation rather than a blank one.
     session_state: dict = {}
@@ -117,15 +120,14 @@ async def main(args):
     macmic = audio.MacMic(q, floor)
     server.CONTROL.update({
         "floor": floor, "macmic": macmic, "max_mics": mics.MAX_MICS,
-        "devices": audio.input_devices,
+        "devices": audio.input_devices, "brain": brain,
         "join_url": f"https://{mic_server.lan_ip()}:{CFG.mic_port}/",
     })
     server.CONTROL["qr_svg"] = qr_svg(server.CONTROL["join_url"])
 
-    tasks = [server.serve(), ear(), mem.loop(), loop_watchdog()]
-    if brain is not None:
-        await brain.select_model()      # know which brain before the talk starts
-        tasks.append(brain.loop())
+    tasks = [server.serve(), ear(), mem.loop(), loop_watchdog(), brain.loop()]
+    if args.brain:
+        await brain.set_enabled(True)   # --brain still works as a startup flag
 
     if args.pcm:
         # One voice, but still through the floor: that is what produces the turn

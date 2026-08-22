@@ -108,6 +108,8 @@ class Brain:
         self.calls = 0
         self.dropped = 0
         self.skipped = 0
+        self.enabled = False        # flipped from the screen; see server.on_presenter
+        self._probed = False
 
     def _cfg(self, think: int | None) -> types.GenerateContentConfig:
         c = types.GenerateContentConfig(
@@ -147,6 +149,30 @@ class Brain:
         print("[brain] no usable model — the canvas will stay blank")
 
     # --- ingest -------------------------------------------------------------
+    async def set_enabled(self, on: bool) -> None:
+        """Turn the brain on or off mid-talk.
+
+        Flips immediately and probes for a usable model in the background: the probe
+        can take several seconds when the primary is rate limited, and a toggle that
+        hangs that long reads as broken. Worst case the first sentence or two go
+        undrawn while the probe settles.
+        """
+        self.enabled = on
+        self._buf = ""               # drop anything queued from before the switch
+        print(f"[brain] {'ENABLED' if on else 'disabled'} "
+              f"- {'3.7-flash decides' if on else 'the ear decides'}")
+        if on and not self._probed:
+            self._probed = True
+            asyncio.create_task(self._probe_then_report())
+
+    async def _probe_then_report(self) -> None:
+        try:
+            await self.select_model()
+        except Exception as e:                       # noqa: BLE001
+            print(f"[brain] probe failed: {str(e)[:90]}")
+        import server                                # local: avoids a cycle
+        server.push_mics()
+
     def feed(self, text: str) -> None:
         """Transcript fragment from the ear.
 
@@ -154,6 +180,8 @@ class Brain:
         the same turn, so the same words arrive more than once. Feeding those
         through would have the brain redraw what it just drew.
         """
+        if not self.enabled:
+            return
         t = text.strip()
         if not t or t in self._seen[-400:]:
             return
@@ -168,6 +196,8 @@ class Brain:
     async def loop(self) -> None:
         while True:
             await asyncio.sleep(0.1)
+            if not self.enabled:
+                continue
             if not self._buf.strip() or time.time() - self._last < DEBOUNCE_S:
                 continue
             if self._inflight >= MAX_INFLIGHT:

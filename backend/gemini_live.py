@@ -279,6 +279,16 @@ async def run(audio_q: asyncio.Queue, broadcast: Callable[[dict], None],
                     # with nothing transcribed at all — an empty room produced
                     # "Nice, Agreed 👍". A prompt cannot guarantee this; a guard
                     # can. If we have not heard words recently, we do not draw.
+                    # With the brain on, IT decides what to draw. Letting the ear
+                    # also call tools would double-draw every sentence.
+                    if brain is not None and brain.enabled:
+                        await session.send_tool_response(function_responses=[
+                            types.FunctionResponse(
+                                id=fc.id, name=fc.name,
+                                response={"error": "another component owns the "
+                                                   "canvas; draw nothing"})
+                            for fc in response.tool_call.function_calls])
+                        continue
                     quiet_for = time.time() - last_heard
                     if quiet_for > SILENCE_GUARD_S:
                         nonlocal_suppressed()

@@ -235,3 +235,12 @@ body.clean.stirring .reveal {
 .reveal:hover { background: rgba(20, 46, 86, .82); color: #EAF2FF; }
 .reveal:active { transform: translateX(-50%) scale(.96); }
 .reveal .msym { font-size: 18px; }
+
+
+/* the brain toggle is a fallback switch, not a feature — keep it quiet until it
+   is doing something, then make it unmistakable */
+.dock-btn.ghost { padding: 0 10px; opacity: .5; }
+.dock-btn.ghost:hover { opacity: 1; }
+.dock-btn.ghost .msym { font-size: 19px; }
+.dock-btn.ghost.on { opacity: 1; background: rgba(168,107,255,.26); }
+.dock-btn.ghost.on .msym { color: #D3B4FF; font-variation-settings: "FILL" 1; }
