@@ -94,13 +94,16 @@ def build_config(handle: str | None = None) -> types.LiveConnectConfig:
         ),
         tools=[types.Tool(function_declarations=tools.DECLARATIONS)],
         input_audio_transcription={},           # gives us the status ticker
-        realtime_input_config={
-            "automatic_activity_detection": {
-                "disabled": False,
-                "silence_duration_ms": 400,     # tune: lower = twitchier
-                "prefix_padding_ms": 60,
-            }
-        },
+        # The model's own VAD works on a real microphone. It does NOT fire on a
+        # replayed PCM feed — with automatic detection on, a --pcm run transcribes
+        # nothing at all. MANUAL_ACTIVITY=1 drives the boundaries from mics.Floor
+        # instead, which is what makes replay rehearsals work.
+        realtime_input_config=types.RealtimeInputConfig(
+            automatic_activity_detection=types.AutomaticActivityDetection(
+                disabled=True) if CFG.manual_activity
+            else types.AutomaticActivityDetection(
+                disabled=False, silence_duration_ms=400, prefix_padding_ms=60)
+        ),
         # Keep the primary context layer alive through a long talk instead of
         # letting it hit the window and die.
         context_window_compression=types.ContextWindowCompressionConfig(
@@ -113,7 +116,7 @@ def build_config(handle: str | None = None) -> types.LiveConnectConfig:
 
 
 async def run(audio_q: asyncio.Queue, broadcast: Callable[[dict], None],
-              memory=None, session_state: dict | None = None):
+              memory=None, session_state: dict | None = None, brain=None):
     """Own the Live session for the whole talk. `broadcast(frame)` is sync.
 
     `session_state` is a dict owned by the caller and reused across reconnects; we
@@ -144,11 +147,35 @@ async def run(audio_q: asyncio.Queue, broadcast: Callable[[dict], None],
             print(f"[live] re-briefed on {len(canvas.BLOCKS)} live blocks")
 
         async def pump_audio():
+            # The queue carries tagged items now, because phone mics put speaker
+            # changes and turn boundaries on the same queue as audio and the
+            # ordering between them matters. See audio.py.
             while True:
-                chunk = await audio_q.get()
-                await session.send_realtime_input(
-                    audio=types.Blob(data=chunk, mime_type="audio/pcm;rate=16000")
-                )
+                kind, payload = await audio_q.get()
+                if kind == "audio":
+                    await session.send_realtime_input(
+                        audio=types.Blob(data=payload,
+                                         mime_type="audio/pcm;rate=16000")
+                    )
+                elif kind == "activity" and CFG.manual_activity:
+                    # Off by default: the model's own VAD works on a real mic.
+                    # Turn it on if a replayed or noisy feed stops being heard.
+                    if payload == "start":
+                        await session.send_realtime_input(
+                            activity_start=types.ActivityStart())
+                    else:
+                        await session.send_realtime_input(
+                            activity_end=types.ActivityEnd())
+                elif kind == "speaker" and CFG.announce_speakers:
+                    # send_client_content, NOT send_realtime_input(text=...):
+                    # realtime text counts as a user turn and would make the model
+                    # answer. turn_complete=False makes it context only, so it can
+                    # attribute the next thing it draws without being prompted.
+                    await session.send_client_content(
+                        turns=[types.Content(role="user", parts=[types.Part(
+                            text=f"[{payload} is now the one speaking]")])],
+                        turn_complete=False,
+                    )
 
         def _mark_tool():
             nonlocal last_tool
@@ -177,6 +204,8 @@ async def run(audio_q: asyncio.Queue, broadcast: Callable[[dict], None],
                 if sc and sc.input_transcription and sc.input_transcription.text:
                     text = sc.input_transcription.text
                     broadcast(ops.status("listening", text))
+                    if brain is not None:
+                        brain.feed(text)             # only with --brain
                     if memory is not None:
                         memory.add_utterance(text)   # feeds the durable layer only
 

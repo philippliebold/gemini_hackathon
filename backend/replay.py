@@ -261,11 +261,30 @@ def reconnect_scenario(quiet: bool) -> None:
     check("session resumption configured (reconnect keeps the conversation)",
           warm.session_resumption is not None
           and warm.session_resumption.handle == "handle-abc123")
-    check("all 9 tools still advertised",
-          len(cold.tools[0].function_declarations) == 9,
-          str(len(cold.tools[0].function_declarations)))
-    check("input transcription on (feeds the durable layer)",
+    from config import CFG
+    check("the ear advertises the full tool set",
+          len(cold.tools[0].function_declarations) == len(tools.DECLARATIONS),
+          f"{len(cold.tools[0].function_declarations)} vs {len(tools.DECLARATIONS)}")
+    check("input transcription on (feeds memory and the ticker)",
           cold.input_audio_transcription is not None)
+    check("VAD mode matches MANUAL_ACTIVITY",
+          cold.realtime_input_config.automatic_activity_detection.disabled
+          == CFG.manual_activity)
+
+    # Every drawing tool must carry the topic key, or the board stops evolving and
+    # starts accreting duplicates again. Catches a newly added tool that forgot it.
+    drawing = [d for d in tools.DECLARATIONS if d["name"].startswith("show_")]
+    missing_key = [d["name"] for d in drawing
+                   if "key" not in d["parameters"]["properties"]]
+    missing_req = [d["name"] for d in drawing
+                   if "key" not in d["parameters"].get("required", [])]
+    check(f"all {len(drawing)} show_* tools take a topic key", not missing_key,
+          str(missing_key))
+    check("...and require it", not missing_req, str(missing_req))
+    missing_rev = [d["name"] for d in drawing
+                   if "revises" not in d["parameters"]["properties"]]
+    check("all show_* tools can branch on contradiction", not missing_rev,
+          str(missing_rev))
 
     print("\n\033[1m── 13. a reconnect is briefed, not amnesiac ─────────\033[0m")
     mem = memory_mod.TopicMemory()

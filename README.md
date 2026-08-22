@@ -50,6 +50,50 @@ shared/      The contract: JSON schema + demo fixture. Both sides read this.
 Backend and frontend never import from each other. The only coupling is
 [CONTRACT.md](CONTRACT.md).
 
+## ⚠️ The API key needs billing enabled
+
+On the free tier `gemini-3.7-flash` allows **20 `generateContent` requests per day**:
+
+```
+Quota exceeded for metric: generate_content_free_tier_requests,
+limit: 20, model: gemini-3.7-flash
+```
+
+That budget is spent in one rehearsal. **Enable billing on the key's project before
+rehearsing** — this is the one blocker that cannot be coded around. Audio streaming
+bills separately and far more cheaply (~$0.005/min), so the ear keeps working even
+when the text quota is gone.
+
+## Findings from the first live runs
+
+Each of these cost a real run to learn. Keep them.
+
+- **`response_modalities=["TEXT"]` is rejected by every Live model** — they are
+  audio-out only, and the original scaffold would have failed at connect. We ask for
+  `AUDIO`, tell the model never to speak, and never read the audio parts.
+- **The model's VAD works on a live mic but never fires on a replayed PCM feed.** A
+  `--pcm` run with automatic detection transcribes *nothing*. For rehearsals run
+  `MANUAL_ACTIVITY=1`, which drives `activity_start`/`activity_end` from
+  `mics.Floor` instead. Live mic: leave it off.
+- **`thinking_budget=0` roughly halves latency** on 3.7-flash (3.0s → 1.7s median).
+  Older flash models reject the parameter with a 400, so it is applied per-model.
+- **Live-model tool calling is the primary path**, and it works from a real mic.
+  `--brain` is the escape hatch: it moves the decision to `gemini-3.7-flash` reading
+  the transcript, where function calling is a first-class non-preview feature. Use
+  it if the live path proves flaky on stage.
+
+## Rehearsing without a mic
+
+```bash
+say -r 155 -o /tmp/t.aiff "your script here"
+afconvert -f WAVE -d LEI16@16000 -c 1 /tmp/t.aiff /tmp/t.wav
+# strip the WAV header to raw PCM, then:
+MANUAL_ACTIVITY=1 python backend/main.py --pcm talk.pcm
+```
+
+Real pipeline, real model, canned audio — the loud-room fallback PLAN.md mandates,
+and the only way to tune the prompt repeatably.
+
 ## How the board evolves (backend)
 
 The screen is an evolving artifact, not a feed. Every visual carries a topic

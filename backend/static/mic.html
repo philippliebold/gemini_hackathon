@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b0d10">
+<title>Co-Presenter — Mic</title>
+<style>
+  :root{--bg:#0b0d10;--fg:#e8eaed;--dim:#9aa0a6;--live:#34a853;--idle:#3c4043;--hot:#8ab4f8}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%}
+  body{background:var(--bg);color:var(--fg);font:16px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+       display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;padding:28px;text-align:center}
+  h1{font-size:15px;font-weight:500;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);margin:0}
+  input{background:#16191d;border:1px solid #2a2e33;color:var(--fg);border-radius:12px;
+        padding:14px 16px;font-size:17px;width:min(320px,80vw);text-align:center}
+  input:focus{outline:none;border-color:var(--hot)}
+  button{border:0;border-radius:999px;padding:20px 44px;font-size:19px;font-weight:600;
+         background:var(--hot);color:#0b0d10;min-width:220px;transition:.15s}
+  button:disabled{opacity:.45}
+  button.live{background:#2a2e33;color:var(--fg)}
+  /* the ring is the whole UI once you're live — readable from arm's length */
+  #ring{width:190px;height:190px;border-radius:50%;display:grid;place-items:center;
+        border:3px solid var(--idle);transition:border-color .12s, box-shadow .12s}
+  #ring.voice{border-color:var(--live)}
+  #ring.floor{border-color:var(--live);box-shadow:0 0 0 10px rgba(52,168,83,.16)}
+  #lvl{font-size:42px;font-weight:300;font-variant-numeric:tabular-nums}
+  #who{font-size:13px;color:var(--dim);min-height:1.3em}
+  #state{font-size:13px;color:var(--dim)}
+  .err{color:#f28b82;font-size:14px;max-width:min(360px,86vw)}
+  .hint{font-size:12px;color:#5f6368;max-width:min(340px,84vw)}
+</style>
+</head>
+<body>
+  <h1>Co-Presenter Mic</h1>
+
+  <div id="setup">
+    <input id="name" placeholder="your name" autocomplete="off"
+           autocapitalize="words" enterkeyhint="go">
+    <p class="hint">Hold the phone where you'd hold it to talk. Headphones or
+      distance between phones — two mics side by side hear the same voice twice.</p>
+  </div>
+
+  <div id="ring"><div id="lvl">—</div></div>
+  <div id="who"></div>
+
+  <button id="go">Go live</button>
+  <div id="state">not connected</div>
+  <div id="err" class="err"></div>
+
+<script>
+const FRAME = 320;            // 20 ms at 16 kHz
+const RATE  = 16000;
+
+const el = id => document.getElementById(id);
+const ui = {name:el("name"), go:el("go"), state:el("state"), err:el("err"),
+            ring:el("ring"), lvl:el("lvl"), who:el("who"), setup:el("setup")};
+
+let ws=null, ctx=null, node=null, stream=null, live=false, wake=null;
+let sent=0, holding=false;
+
+// The worklet does the whole hot path: resample to 16 kHz, pack to int16, hand
+// over one 20 ms frame at a time. Kept on the audio thread so a busy UI cannot
+// add jitter to the stream.
+const WORKLET = `
+class PCM16 extends AudioWorkletProcessor {
+  constructor(){ super(); this.ratio = sampleRate / ${RATE};
+                 this.pend = new Float32Array(0);
+                 this.out = new Int16Array(${FRAME}); this.n = 0; }
+  process(inputs){
+    const ch = inputs[0] && inputs[0][0];
+    if (!ch) return true;
+    const m = new Float32Array(this.pend.length + ch.length);
+    m.set(this.pend); m.set(ch, this.pend.length);
+    let pos = 0;
+    while (Math.floor(pos) + 1 < m.length) {
+      const i = Math.floor(pos), t = pos - i;
+      let s = m[i] * (1 - t) + m[i+1] * t;
+      s = s < -1 ? -1 : s > 1 ? 1 : s;
+      this.out[this.n++] = s * 32767;
+      if (this.n === ${FRAME}) {
+        this.port.postMessage(this.out.slice(0));   // copy: we reuse the buffer
+        this.n = 0;
+      }
+      pos += this.ratio;
+    }
+    this.pend = m.slice(Math.floor(pos));
+    return true;
+  }
+}
+registerProcessor('pcm16', PCM16);`;
+
+function say(s){ ui.state.textContent = s; }
+function fail(s){ ui.err.textContent = s; }
+
+async function start(){
+  ui.go.disabled = true; fail(""); say("asking for the mic…");
+  try {
+    // NS/AGC are worth their ~20 ms in a loud room — they help transcription far
+    // more than the latency costs. EC off: nothing is playing back on the phone.
+    stream = await navigator.mediaDevices.getUserMedia({audio:{
+      channelCount:1, noiseSuppression:true, autoGainControl:true,
+      echoCancellation:false
+    }, video:false});
+  } catch(e){
+    ui.go.disabled = false;
+    return fail("No mic access. " + (location.protocol === "https:"
+      ? "Allow the microphone permission and try again."
+      : "This page must be opened over https:// — see the URL the Mac printed."));
+  }
+
+  say("connecting…");
+  ws = new WebSocket(`wss://${location.host}/`);
+  ws.binaryType = "arraybuffer";
+
+  ws.onopen = () => ws.send(JSON.stringify({hello:1, label:ui.name.value}));
+
+  ws.onmessage = (ev) => {
+    let msg; try { msg = JSON.parse(ev.data); } catch { return; }
+    if (msg.error){ fail(msg.error); stop(); return; }
+    if (msg.ok){
+      live = true;
+      ui.setup.style.display = "none";
+      ui.go.textContent = "Stop"; ui.go.className = "live"; ui.go.disabled = false;
+      ui.who.textContent = `${msg.label} · ${msg.id}`;
+      say("live");
+      keepAwake();
+      pump();
+    }
+    if (msg.holder !== undefined){
+      holding = !!msg.holder;
+      ui.ring.classList.toggle("floor", holding);
+      say(holding ? "you have the floor" : "live");
+    }
+  };
+  ws.onclose = () => { if (live) say("disconnected — reopen to rejoin"); stop(); };
+  ws.onerror  = () => fail("Could not connect. Same Wi-Fi as the Mac?");
+}
+
+async function pump(){
+  ctx = new (window.AudioContext || window.webkitAudioContext)(
+    {sampleRate:RATE, latencyHint:"interactive"});
+  await ctx.resume();
+  await ctx.audioWorklet.addModule(
+    URL.createObjectURL(new Blob([WORKLET], {type:"application/javascript"})));
+  node = new AudioWorkletNode(ctx, "pcm16");
+  node.port.onmessage = (e) => {
+    if (!ws || ws.readyState !== 1) return;
+    const pcm = e.data;
+    ws.send(pcm.buffer);
+    sent++;
+    if ((sent & 3) === 0) meter(pcm);      // 12 Hz is plenty for a level ring
+  };
+  ctx.createMediaStreamSource(stream).connect(node);
+  // Never connect to destination — that would play your own voice back at you.
+}
+
+function meter(pcm){
+  let sum = 0;
+  for (let i = 0; i < pcm.length; i += 4) sum += pcm[i] * pcm[i];
+  const rms = Math.sqrt(sum / (pcm.length / 4)) / 32768;
+  const db = Math.max(0, Math.min(100, Math.round((rms ** 0.5) * 190)));
+  ui.lvl.textContent = db;
+  ui.ring.classList.toggle("voice", rms > 0.010 && !holding);
+}
+
+async function keepAwake(){
+  try { wake = await navigator.wakeLock.request("screen"); } catch {}
+}
+
+function stop(){
+  live = false; holding = false;
+  try { node && node.disconnect(); } catch {}
+  try { ctx && ctx.close(); } catch {}
+  try { stream && stream.getTracks().forEach(t => t.stop()); } catch {}
+  try { ws && ws.close(); } catch {}
+  try { wake && wake.release(); } catch {}
+  ws = ctx = node = stream = wake = null;
+  ui.setup.style.display = ""; ui.go.textContent = "Go live";
+  ui.go.className = ""; ui.go.disabled = false;
+  ui.ring.className = ""; ui.lvl.textContent = "—"; ui.who.textContent = "";
+  say("not connected");
+}
+
+ui.go.onclick = () => (live ? stop() : start());
+ui.name.addEventListener("keydown", e => { if (e.key === "Enter") start(); });
+addEventListener("pagehide", stop);
+</script>
+</body>
+</html>

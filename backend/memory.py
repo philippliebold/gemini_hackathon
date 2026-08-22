@@ -129,6 +129,10 @@ class TopicMemory:
                 system_instruction=SYSTEM,
                 response_mime_type="application/json",
                 temperature=0.2,
+                # We pass no tools here; disabling AFC silences the SDK advisory
+                # so a real error is visible in the demo log.
+                automatic_function_calling=types.AutomaticFunctionCallingConfig(
+                    disable=True),
             ),
         )
         parsed = _parse(getattr(resp, "text", "") or "")

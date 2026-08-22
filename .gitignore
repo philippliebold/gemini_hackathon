@@ -9,3 +9,5 @@ node_modules/
 recordings/
 .session/
 *.pcm
+env.example
+.env.*
