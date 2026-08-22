@@ -10,7 +10,8 @@ from typing import Any, Iterable
 
 V = 1
 
-BLOCK_TYPES = {"text", "stat", "diagram", "chart", "table", "image", "map", "code"}
+BLOCK_TYPES = {"text", "stat", "diagram", "chart", "table", "image", "map", "code",
+               "hero", "math"}
 STATES = {"idle", "listening", "thinking", "drawing", "error"}
 
 _seq = itertools.count(1)

@@ -64,6 +64,7 @@ function addBlock(p) {
   state.blocks.set(p.id, { payload: p, el });
   if (p.type === "diagram") window.CoPresenterBlocks.hydrateMermaid(el);
   if (p.type === "chart") window.CoPresenterBlocks.hydrateCharts(el);
+  if (p.type === "math") window.CoPresenterBlocks.hydrateMath(el);
   els.empty.style.opacity = "0";
   requestAnimationFrame(drawLinks);
 }
@@ -80,6 +81,7 @@ function updateBlock(p) {
     b.el.innerHTML = window.CoPresenterBlocks.renderBlock(b.payload.type, b.payload.data);
     if (b.payload.type === "diagram") window.CoPresenterBlocks.hydrateMermaid(b.el);
     if (b.payload.type === "chart") window.CoPresenterBlocks.hydrateCharts(b.el);
+    if (b.payload.type === "math") window.CoPresenterBlocks.hydrateMath(b.el);
   }
   drawLinks();
 }
@@ -439,3 +441,30 @@ async function toggleCam() {
 dock.add.onclick   = addMic;
 dock.cam.onclick   = toggleCam;
 dock.clear.onclick = () => { clearCanvas(); sendPresenter("clear"); };
+
+
+/* ---------- presenter mode ----------
+ * Strips every affordance: dock, status, hints, dot grid. What remains is
+ * the canvas on white. This is what the room should see for the whole talk;
+ * the dock exists for the minute before it starts. */
+function setStage(on) {
+  document.body.classList.toggle("stage", on);
+  const i = dock.stage && dock.stage.querySelector(".msym");
+  if (i) i.textContent = on ? "fullscreen_exit" : "fullscreen";
+  if (on && document.documentElement.requestFullscreen)
+    document.documentElement.requestFullscreen().catch(() => {});
+  else if (!on && document.fullscreenElement && document.exitFullscreen)
+    document.exitFullscreen().catch(() => {});
+  /* charts must re-measure after the chrome disappears */
+  setTimeout(() => document.querySelectorAll(".echart-slot").forEach((el) => {
+    if (el._chart) el._chart.resize();
+  }), 420);
+}
+
+dock.stage = document.getElementById("stage-btn");
+if (dock.stage) dock.stage.onclick = () => setStage(!document.body.classList.contains("stage"));
+addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && document.body.classList.contains("stage")) setStage(false);
+  if (e.key.toLowerCase() === "p" && !e.metaKey && !e.ctrlKey)
+    setStage(!document.body.classList.contains("stage"));
+});

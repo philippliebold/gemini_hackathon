@@ -12,9 +12,43 @@ The dispatcher finds it by name.
 """
 from typing import Any
 
+import asyncio
+import base64
+
 import canvas
 import ops
 from config import CFG
+
+# Set once by main.py so slow tools (image generation) can push a second
+# frame when their result lands. Without it they simply stay a placeholder.
+BROADCAST = None
+
+
+async def _generate_image(block_id: str, prompt: str) -> None:
+    """Fill an image placeholder. Takes ~12s, so it must never block the
+    live audio loop -- it runs as a detached task and updates in place."""
+    if not BROADCAST or not CFG.api_key:
+        return
+    try:
+        from google import genai
+        from google.genai import types as gt
+        client = genai.Client(api_key=CFG.api_key)
+        r = await asyncio.to_thread(
+            client.models.generate_content,
+            model=CFG.image_model,
+            contents=(f"{prompt}. Cinematic, photographic, dramatic lighting, "
+                      "wide establishing shot, no text, no watermark."),
+            config=gt.GenerateContentConfig(response_modalities=["IMAGE"]),
+        )
+        for part in r.candidates[0].content.parts:
+            blob = getattr(part, "inline_data", None)
+            if blob and blob.data:
+                uri = (f"data:{blob.mime_type};base64,"
+                       + base64.b64encode(blob.data).decode())
+                BROADCAST(ops.block_update(block_id, {"src": uri}))
+                return
+    except Exception as exc:                      # never kill the session
+        print(f"[image] {type(exc).__name__}: {exc}")
 
 # --- the two params that make the board evolve ------------------------------
 # Spliced into every show_* declaration. This is the whole decision surface:
@@ -58,6 +92,33 @@ def _decl(name: str, description: str, props: dict, required: list[str]) -> dict
 # product: it decides WHEN something lands on screen.
 
 DECLARATIONS: list[dict[str, Any]] = [
+    _decl(
+        "show_hero",
+        "The DEFAULT way to put an idea on screen. One emoji plus 2-5 words. Use this "
+        "instead of show_concept whenever the point fits in a few words -- it reads from "
+        "the back of a room, a paragraph does not. Pick an emoji that carries the meaning "
+        "on its own. Prefer this over every other text tool.",
+        {
+            "emoji": {"type": "string",
+                      "description": "ONE emoji that carries the idea, e.g. 'GG' bridge, rocket, warning"},
+            "title": {"type": "string", "description": "2-5 words. Never a sentence."},
+            "sub": {"type": "string", "description": "Optional: a few words of detail, e.g. '1937 - 2,737 m'"},
+            "big": {"type": "boolean", "description": "true for the single most important idea on screen"},
+        },
+        ["title"],
+    ),
+    _decl(
+        "show_math",
+        "Render a formula or equation with real typesetting. Use when the speaker states "
+        "a relationship, a formula, a rate, or any maths worth seeing set properly.",
+        {
+            "tex": {"type": "string",
+                    "description": r"LaTeX WITHOUT delimiters, e.g. 'E = mc^2' or '\frac{wx^2}{2H}'"},
+            "title": {"type": "string", "description": "Optional 1-3 word label"},
+            "note": {"type": "string", "description": "Optional: what it means, under 8 words"},
+        },
+        ["tex"],
+    ),
     _decl(
         "show_concept",
         "Put a concept card on the canvas. Use when the speaker makes a point worth "
@@ -269,8 +330,12 @@ def tool_show_image(key: str, prompt: str | None = None,
     frames, result = _emit("image", key, {"src": None, "caption": caption or prompt,
                                           "alt": prompt}, revises,
                            needs=("alt",), w=420, h=320, enter="fade")
-    # TODO: kick off async image gen, then broadcast
-    #   ops.block_update(result["block_id"], {"src": data_uri})
+    if prompt:
+        try:
+            asyncio.get_running_loop().create_task(
+                _generate_image(result["block_id"], prompt))
+        except RuntimeError:
+            pass                                  # no loop (tests): stay a placeholder
     return frames, result | {"status": "generating"}
 
 
@@ -285,6 +350,20 @@ def tool_connect_blocks(from_id: str, to_id: str, label: str | None = None, **_)
 def tool_clear_canvas(**_):
     canvas.reset()
     return [ops.canvas_clear()], {"ok": True}
+
+
+def tool_show_hero(key: str, title: str | None = None, emoji: str | None = None,
+                   sub: str | None = None, big: bool = False,
+                   revises: str | None = None, **_):
+    return _emit("hero", key, {"title": title, "emoji": emoji, "sub": sub,
+                               "big": bool(big)}, revises,
+                 needs=("title",), w=380, h=200, enter="pop")
+
+
+def tool_show_math(key: str, tex: str | None = None, title: str | None = None,
+                   note: str | None = None, revises: str | None = None, **_):
+    return _emit("math", key, {"tex": tex, "title": title, "note": note}, revises,
+                 needs=("tex",), w=420, h=180, enter="fade")
 
 
 def dispatch(name: str, args: dict) -> tuple[list[dict], dict]:

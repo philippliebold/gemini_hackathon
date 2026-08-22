@@ -337,3 +337,65 @@ html, body {
   padding: 11px; border-radius: 999px;
 }
 .picker-cancel:hover { background: #E8F0FE; }
+
+/* ── Presenter mode ─────────────────────────────────────────────────────
+   One button strips everything that isn't the canvas: dock, status, hints,
+   even the dot grid. What's left is the application on a white screen.
+   Esc returns. This is the state the room should see for the whole talk. */
+
+body.stage #dock,
+body.stage #status,
+body.stage .hint,
+body.stage .cam-wrap { opacity: 0 !important; pointer-events: none !important; }
+
+body.stage #viewport { background-image: none; background: #fff; }
+body.stage { background: #fff; }
+
+/* blocks breathe more when nothing else is on screen */
+body.stage .block { box-shadow: 0 6px 24px rgba(60,64,67,.10), 0 1px 3px rgba(60,64,67,.08); }
+
+/* ── Sparse, emoji-forward blocks ───────────────────────────────────────
+   Text is expensive from 10 metres. A glyph carries the category instantly
+   and costs one character. */
+
+.b-emoji {
+  font-size: 56px; line-height: 1;
+  margin-bottom: 14px;
+  font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+}
+.b-emoji.xl { font-size: 92px; }
+
+/* the headline form: one glyph, a few words, nothing else */
+.b-hero {
+  display: flex; flex-direction: column; align-items: flex-start;
+  justify-content: center; gap: 6px; min-height: 120px;
+}
+.b-hero .t {
+  font-family: var(--font-display);
+  font-size: 34px; font-weight: 500; line-height: 1.15;
+  color: var(--on-surface); letter-spacing: -.01em;
+}
+.b-hero .s { font-size: 16px; color: var(--on-muted); }
+
+/* ── Math ───────────────────────────────────────────────────────────── */
+
+.b-math {
+  display: flex; align-items: center; justify-content: center;
+  padding: 12px 4px; min-height: 96px;
+}
+.b-math .katex { font-size: 2.0em; color: var(--on-surface); }
+.b-math .katex-display { margin: 0; }
+
+/* ── Imagery: cinematic, edge to edge ───────────────────────────────── */
+
+.b-img {
+  margin: -28px -32px -28px -32px;      /* bleed past the card padding */
+  border-radius: 22px; overflow: hidden;
+  background: var(--surface-sink);
+}
+.b-img img { display: block; width: 100%; height: auto; }
+.b-img.has-cap { margin-bottom: 14px; }
+
+/* fade the real pixels in over the shimmer instead of popping */
+.b-img img { animation: img-in .8s var(--ease) both; }
+@keyframes img-in { from { opacity: 0; transform: scale(1.03) } }

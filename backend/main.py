@@ -14,12 +14,16 @@ import gemini_live
 import memory as memory_mod
 import ops
 import server
+import tools
 from config import CFG
 
 
 async def main(args):
     if not CFG.api_key:
         sys.exit("GEMINI_API_KEY is not set. cp .env.example .env and fill it in.")
+
+    # let slow tools (image generation) push their second frame
+    tools.BROADCAST = server.broadcast
 
     q: asyncio.Queue = asyncio.Queue(maxsize=200)
     source = (audio.file_chunks(q, args.pcm) if args.pcm

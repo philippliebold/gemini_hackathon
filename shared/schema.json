@@ -24,7 +24,7 @@
             "required": ["id", "type", "x", "y", "data"],
             "properties": {
               "id": { "type": "string", "pattern": "^b_" },
-              "type": { "enum": ["text", "stat", "diagram", "chart", "table", "image", "map", "code"] },
+              "type": { "enum": ["text", "stat", "diagram", "chart", "table", "image", "map", "code", "hero", "math"] },
               "x": { "type": "number" },
               "y": { "type": "number" },
               "w": { "type": "number" },

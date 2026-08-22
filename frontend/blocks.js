@@ -55,18 +55,42 @@ const RENDER = {
         </tr>`).join("")}</tbody>
     </table>`,
 
+  /* Cinematic: the picture bleeds to the card edge. Generation takes ~12s,
+     so the shimmer is the block for a while -- it must look deliberate. */
   image: (d) => d.src
-    ? `<img src="${esc(d.src)}" alt="${esc(d.alt)}" class="w-full rounded-xl">
-       ${d.caption ? `<div class="text-[#80868B] text-xs mt-3">${esc(d.caption)}</div>` : ""}`
-    : `<div class="shimmer w-full h-40 rounded-xl"></div>
-       <div class="text-[#9AA0A6] text-xs mt-3">${esc(d.caption || "imagining…")}</div>`,
+    ? `<div class="b-img ${d.caption ? "has-cap" : ""}">
+         <img src="${esc(d.src)}" alt="${esc(d.alt)}">
+       </div>
+       ${d.caption ? `<div class="text-[#5F6368] text-sm">${esc(d.caption)}</div>` : ""}`
+    : `<div class="b-img has-cap"><div class="shimmer" style="height:220px"></div></div>
+       <div class="text-[#9AA0A6] text-sm">${esc(d.caption || "imagining…")}</div>`,
+
+  /* One glyph, a few words. The cheapest thing to read from the back. */
+  hero: (d) => `
+    <div class="b-hero">
+      ${d.emoji ? `<div class="b-emoji ${d.big ? "xl" : ""}">${esc(d.emoji)}</div>` : ""}
+      <div class="t">${esc(d.title)}</div>
+      ${d.sub ? `<div class="s">${esc(d.sub)}</div>` : ""}
+    </div>`,
+
+  /* KaTeX renders after mount, same pattern as charts. */
+  math: (d) => `
+    ${title(d.title || null)}
+    <div class="b-math katex-slot" data-tex="${esc(d.tex || "")}">
+      <code class="text-[#80868B] text-sm">${esc(d.tex || "")}</code>
+    </div>
+    ${d.note ? `<div class="text-[#5F6368] text-sm mt-2">${esc(d.note)}</div>` : ""}`,
 
   map: (d) => `
     ${title(`${d.from} → ${d.to}`)}
     ${d.embed_url
       ? `<iframe src="${esc(d.embed_url)}" class="w-full h-48 rounded-xl border-0"
            loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>`
-      : `<svg viewBox="0 0 200 180" class="w-full h-48 rounded-xl bg-[#F8F9FA]">
+      : `<svg viewBox="0 0 200 180" class="w-full h-56 rounded-xl bg-[#F8F9FA]">
+           <rect width="200" height="180" fill="#F8F9FA"/>
+           <path d="M0 40 H200 M0 118 H200 M52 0 V180 M148 0 V180"
+                 stroke="#E8EAED" stroke-width="7" fill="none"/>
+           <path d="M0 78 H200" stroke="#E8EAED" stroke-width="11" fill="none"/>
            <polyline points="${(d.polyline || []).map((p) => p.join(",")).join(" ")}"
              fill="none" stroke="#4285F4" stroke-width="3" stroke-linecap="round"
              stroke-dasharray="600" stroke-dashoffset="600">
@@ -191,4 +215,17 @@ function hydrateCharts(root) {
   });
 }
 
-window.CoPresenterBlocks = { renderBlock, hydrateMermaid, hydrateCharts };
+/* ---------- KaTeX ---------- */
+function hydrateMath(root) {
+  if (!window.katex) return;
+  root.querySelectorAll(".katex-slot").forEach((slot) => {
+    if (slot.dataset.done) return;
+    slot.dataset.done = "1";
+    try {
+      katex.render(slot.dataset.tex || "", slot,
+                   { displayMode: true, throwOnError: false });
+    } catch (e) { /* leave the raw TeX visible */ }
+  });
+}
+
+window.CoPresenterBlocks = { renderBlock, hydrateMermaid, hydrateCharts, hydrateMath };
