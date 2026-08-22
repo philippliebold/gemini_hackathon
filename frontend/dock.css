@@ -1,0 +1,132 @@
+/* Control dock — mics, camera, clear, hide.
+   Dark glass to sit on the stage; auto-hides after 3s of stillness. */
+
+.dock {
+  position: fixed; bottom: 26px; left: 50%;
+  transform: translateX(-50%);
+  display: flex; align-items: center; gap: 6px;
+  padding: 10px 14px; z-index: 30;
+  background: rgba(12, 30, 58, .72);
+  border: 1px solid rgba(255,255,255,.14);
+  border-radius: 999px;
+  backdrop-filter: blur(22px) saturate(160%);
+  -webkit-backdrop-filter: blur(22px) saturate(160%);
+  box-shadow: 0 24px 70px -24px rgba(0,0,0,.8);
+  transition: opacity .45s cubic-bezier(.16,1,.3,1),
+              transform .45s cubic-bezier(.16,1,.3,1);
+}
+.dock.hidden { opacity: 0; transform: translateX(-50%) translateY(26px); pointer-events: none; }
+
+.dock-row { display: flex; align-items: center; gap: 6px; }
+.dock-row:empty { display: none; }
+.dock-sep { width: 1px; height: 26px; background: rgba(255,255,255,.16); margin: 0 4px; }
+.dock-row:empty + .dock-sep { display: none; }
+
+.dock-btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  white-space: nowrap; flex: none;
+  height: 44px; padding: 0 18px;
+  border: none; border-radius: 999px; cursor: pointer;
+  background: rgba(255,255,255,.09); color: #EAF2FF;
+  font-family: "Google Sans", Roboto, sans-serif; font-size: 14px; font-weight: 500;
+  transition: background .2s ease, transform .12s ease;
+}
+.dock-btn:hover  { background: rgba(255,255,255,.16); }
+.dock-btn:active { transform: scale(.96); }
+.dock-btn:disabled { opacity: .36; cursor: not-allowed; }
+.dock-btn .msym { font-size: 20px; color: #B9D0F0; }
+.dock-btn.on { background: rgba(66,133,244,.30); color: #BBD7FF; }
+.dock-btn.on .msym { color: #7FB0FF; font-variation-settings: "FILL" 1; }
+
+.msym {
+  font-family: "Material Symbols Rounded"; font-weight: normal; font-style: normal;
+  line-height: 1; letter-spacing: normal; text-transform: none; white-space: nowrap;
+  display: inline-block; direction: ltr; -webkit-font-feature-settings: "liga";
+  -webkit-font-smoothing: antialiased;
+  font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
+  transition: font-variation-settings .4s cubic-bezier(.16,1,.3,1);
+}
+
+/* ── Mic chips, in the four brand colours ───────────────────────────── */
+
+.mic-chip {
+  display: inline-flex; align-items: center; gap: 8px;
+  white-space: nowrap; flex: none;
+  height: 44px; padding: 0 8px 0 14px;
+  border: none; border-radius: 999px; cursor: pointer;
+  background: rgba(255,255,255,.09); color: #EAF2FF;
+  font-family: "Google Sans", Roboto, sans-serif; font-size: 14px; font-weight: 500;
+  transition: background .2s ease, opacity .2s ease;
+}
+.mic-chip:hover { background: rgba(255,255,255,.16); }
+.mic-chip .swatch {
+  width: 10px; height: 10px; border-radius: 50%; flex: none;
+  background: var(--mic-color, #7FA3D4);
+}
+.mic-chip.speaking .swatch { animation: mic-pulse 1.1s cubic-bezier(.16,1,.3,1) infinite; }
+@keyframes mic-pulse {
+  0%   { box-shadow: 0 0 0 0 var(--mic-color); opacity: 1 }
+  70%  { box-shadow: 0 0 0 8px transparent;    opacity: .8 }
+  100% { box-shadow: 0 0 0 0 transparent;      opacity: 1 }
+}
+.mic-chip .msym { font-size: 19px; color: #B9D0F0; }
+.mic-chip.muted { background: transparent; color: #7FA3D4; }
+.mic-chip.muted .swatch { background: rgba(255,255,255,.22); animation: none; box-shadow: none; }
+.mic-chip.muted .msym { color: #EA4335; }
+.mic-chip .level {
+  width: 26px; height: 3px; border-radius: 2px; overflow: hidden;
+  background: rgba(255,255,255,.18);
+}
+.mic-chip .level i { display: block; height: 100%; width: 0%;
+  background: var(--mic-color); transition: width .08s linear; }
+.mic-chip.muted .level { opacity: .3 }
+
+.mic-1 { --mic-color: #4285F4 }
+.mic-2 { --mic-color: #EA4335 }
+.mic-3 { --mic-color: #FBBC04 }
+.mic-4 { --mic-color: #34A853 }
+
+/* ── Camera preview ─────────────────────────────────────────────────── */
+
+.cam-wrap {
+  position: fixed; bottom: 92px; right: 26px; z-index: 25;
+  width: 208px; border-radius: 20px; overflow: hidden;
+  border: 1px solid rgba(255,255,255,.18); background: #000;
+  box-shadow: 0 24px 70px -24px rgba(0,0,0,.85);
+  opacity: 0; transform: translateY(12px) scale(.96); pointer-events: none;
+  transition: opacity .4s cubic-bezier(.16,1,.3,1), transform .4s cubic-bezier(.16,1,.3,1);
+}
+.cam-wrap.on { opacity: 1; transform: none; }
+.cam-wrap video { display: block; width: 100%; height: auto; }
+
+/* ── Device picker ──────────────────────────────────────────────────── */
+
+.picker {
+  position: fixed; inset: 0; z-index: 60; display: none; place-items: center;
+  background: rgba(4, 12, 26, .6); backdrop-filter: blur(6px);
+}
+.picker.on { display: grid; }
+.picker-card {
+  background: rgba(16, 38, 70, .92);
+  border: 1px solid rgba(255,255,255,.16);
+  border-radius: 28px; padding: 26px 24px; min-width: 340px; max-width: 460px;
+  backdrop-filter: blur(28px);
+  box-shadow: 0 40px 110px -30px rgba(0,0,0,.9);
+  font-family: "Google Sans", Roboto, sans-serif; color: #EAF2FF;
+}
+.picker-title { font-size: 20px; margin-bottom: 14px; }
+.picker-item {
+  display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
+  border: none; cursor: pointer; background: transparent; border-radius: 14px;
+  padding: 13px 14px; font-size: 15px; color: #EAF2FF;
+  font-family: "Google Sans", Roboto, sans-serif;
+}
+.picker-item:hover { background: rgba(255,255,255,.09); }
+.picker-item .msym { color: #B9D0F0; font-size: 20px; }
+.picker-item[disabled] { opacity: .4; cursor: not-allowed; }
+.picker-cancel {
+  margin-top: 12px; width: 100%; border: none; cursor: pointer; background: transparent;
+  color: #7FB0FF; font-size: 14px; font-weight: 500; padding: 11px; border-radius: 999px;
+  font-family: "Google Sans", Roboto, sans-serif;
+}
+.picker-cancel:hover { background: rgba(66,133,244,.18); }

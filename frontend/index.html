@@ -4,102 +4,80 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Co-Presenter</title>
-<script src="https://cdn.tailwindcss.com"></script>
-<script type="module">
-  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
-  mermaid.initialize({ startOnLoad: false, theme: "base",
-                       securityLevel: "loose", fontFamily: "inherit",
-                       themeVariables: {
-                         primaryColor: "#E8F0FE",  primaryTextColor: "#202124",
-                         primaryBorderColor: "#4285F4", lineColor: "#5F6368",
-                         secondaryColor: "#FCE8E6", tertiaryColor: "#E6F4EA",
-                         background: "#FFFFFF", mainBkg: "#E8F0FE",
-                         fontSize: "15px"
-                       } });
-  window.mermaid = mermaid;
-  window.dispatchEvent(new Event("mermaid-ready"));
-</script>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
-<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/echarts@6.1.0/dist/echarts.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/gsap.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/Flip.min.js"></script>
+
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=block" rel="stylesheet">
-<link href="https://fonts.googleapis.com/css2?family=Google+Sans+Code:wght@400;500&family=Roboto:wght@400;500;700&family=Roboto+Mono:wght@400;500&family=Noto+Sans:wght@400;500;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="./styles.css">
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&family=Roboto+Mono:wght@400&family=Noto+Sans:wght@300;400;500;700&display=swap" rel="stylesheet">
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/echarts@6.1.0/dist/echarts.min.js"></script>
+
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+  mermaid.initialize({
+    startOnLoad: false, securityLevel: "loose", theme: "base",
+    fontFamily: "Google Sans, Roboto, sans-serif",
+    themeVariables: {
+      primaryColor: "rgba(111,168,255,.18)", primaryTextColor: "#EAF2FF",
+      primaryBorderColor: "#6FA8FF", lineColor: "#8FB4E8",
+      secondaryColor: "rgba(255,122,110,.18)", tertiaryColor: "rgba(91,208,124,.18)",
+      background: "transparent", mainBkg: "rgba(111,168,255,.18)", fontSize: "16px"
+    }
+  });
+  window.mermaid = mermaid;
+  window.dispatchEvent(new Event("mermaid-ready"));
+</script>
+
+<link rel="stylesheet" href="./stage.css">
+<link rel="stylesheet" href="./dock.css">
 </head>
-<body class="overflow-hidden h-screen w-screen">
+<body>
 
-  <!-- camera-transformed world -->
-  <div id="viewport" class="absolute inset-0">
-    <div id="world" class="absolute left-1/2 top-1/2 will-change-transform">
-      <svg id="links" class="absolute overflow-visible pointer-events-none"
-           style="left:0;top:0;width:1px;height:1px"></svg>
-      <div id="blocks" class="absolute" style="left:0;top:0"></div>
-    </div>
+  <!-- drifting light field -->
+  <div id="sky"><b></b><b></b><b></b></div>
+  <div id="grain"></div>
+
+  <!-- where scenes live -->
+  <div id="stage"><div id="slots" data-n="1"></div></div>
+
+  <!-- nothing said yet -->
+  <div id="idle"><span class="core-dots"><i></i><i></i><i></i><i></i></span></div>
+
+  <!-- the only persistent chrome -->
+  <div id="hud">
+    <span id="dots" class="core-dots"><i></i><i></i><i></i><i></i></span>
+    <span id="caption"></span>
   </div>
 
-  <!-- empty state -->
-  <div id="empty" class="absolute inset-0 grid place-items-center pointer-events-none">
-    <div class="flex flex-col items-center gap-6">
-      <div class="core-dots scale-[2.2]"><i></i><i></i><i></i><i></i></div>
-      <p class="text-sm tracking-widest uppercase">listening</p>
-    </div>
-  </div>
-
-  <!-- status chip -->
-  <div id="status" class="absolute bottom-6 left-6 flex items-center gap-3 text-xs
-                          text-[#5F6368]">
-    <span id="dot" class="core-dots"><i></i><i></i><i></i><i></i></span>
-    <span id="state">connecting</span>
-    <span id="transcript" class="text-[#80868B] max-w-[46ch] truncate"></span>
-  </div>
-
-  <!-- ── Control dock ──────────────────────────────────────────────────
-       Presenters face the room, so this hides itself after 3s of no mouse
-       movement and returns on the first twitch. Visible when you need it,
-       invisible in the photo the audience is looking at. -->
   <div id="dock" class="dock">
-    <div class="dock-row" id="mic-row"><!-- mic chips injected here --></div>
-
+    <div class="dock-row" id="mic-row"></div>
     <div class="dock-sep"></div>
-
     <button id="add-mic" class="dock-btn" title="Add a microphone (up to 4)">
-      <span class="msym">add</span><span class="dock-label">Mic</span>
+      <span class="msym">add</span><span>Mic</span>
     </button>
-
     <button id="cam-btn" class="dock-btn" title="Toggle camera">
-      <span class="msym">videocam_off</span><span class="dock-label">Camera</span>
+      <span class="msym">videocam_off</span><span>Camera</span>
     </button>
-
     <div class="dock-sep"></div>
-
-    <button id="clear-btn" class="dock-btn" title="Clear the canvas">
+    <button id="clear-btn" class="dock-btn" title="Clear (C)">
       <span class="msym">ink_eraser</span>
     </button>
-
-    <button id="stage-btn" class="dock-btn" title="Presenter mode — hide everything (Esc to exit)">
+    <button id="stage-btn" class="dock-btn" title="Hide all chrome (H)">
       <span class="msym">fullscreen</span>
     </button>
   </div>
 
-  <!-- camera preview: proof to the room that the lens is live -->
   <div id="cam-wrap" class="cam-wrap"><video id="cam" autoplay muted playsinline></video></div>
 
-  <!-- device picker -->
   <div id="picker" class="picker"><div class="picker-card">
     <div class="picker-title">Choose a microphone</div>
     <div id="picker-list"></div>
     <button id="picker-cancel" class="picker-cancel">Cancel</button>
   </div></div>
 
-  <div class="hint absolute bottom-6 right-6 text-[10px] text-[#BDC1C6]" style="transition:opacity .4s">
-    scroll zoom · drag pan · F fit · C clear
-  </div>
-
-  <script src="./blocks.js"></script>
-  <script src="./app.js"></script>
+  <script src="./stage.js"></script>
+  <script src="./dock.js"></script>
 </body>
 </html>

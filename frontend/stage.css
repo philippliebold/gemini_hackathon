@@ -1,0 +1,322 @@
+/* ═══ Co-Presenter — cinematic stage ═══════════════════════════════════
+   Not a board. A film.
+
+   Nothing persists. Each thing arrives, holds the room, and leaves. At most
+   three elements exist at once and only one is ever dominant, because the
+   presenter is facing the audience and cannot say "look at the top right".
+   The screen decides what you're looking at.
+
+   Palette is Google's, but pitched dark: the four brand colours read as
+   light sources against deep blue rather than ink on white.
+   ══════════════════════════════════════════════════════════════════════ */
+
+:root {
+  --g-blue:   #4285F4;
+  --g-red:    #EA4335;
+  --g-yellow: #FBBC04;
+  --g-green:  #34A853;
+
+  --ink-0: #0A1A33;      /* deepest */
+  --ink-1: #102A52;
+  --ink-2: #17427F;
+
+  --on-hi:  #F4F8FF;
+  --on-mid: #B9D0F0;
+  --on-lo:  #7FA3D4;
+
+  --font-display: "Google Sans", "Product Sans", "Noto Sans", system-ui, sans-serif;
+  --font-body: "Google Sans Text", "Google Sans", Roboto, system-ui, sans-serif;
+  --font-mono: "Roboto Mono", ui-monospace, monospace;
+
+  --grad-hero: linear-gradient(96deg, #FFFFFF 8%, #BBD5FF 62%, #7FB0FF 100%);
+  --grad-num:  linear-gradient(150deg, #FFFFFF, #86B6FF);
+
+  --ease-out: cubic-bezier(.16, 1, .3, 1);      /* the money curve */
+  --ease-io:  cubic-bezier(.65, 0, .35, 1);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0; height: 100%; overflow: hidden;
+  background: var(--ink-0);
+  color: var(--on-hi);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── The ground: a slow-drifting gradient field ─────────────────────────
+   Three coloured lights orbiting behind everything. It is never still, so
+   the screen looks alive even in the seconds when nothing is happening. */
+
+#sky { position: fixed; inset: 0; z-index: 0; overflow: hidden;
+       background: linear-gradient(160deg, #0A1A33 0%, #102A52 48%, #0A1A33 100%); }
+
+#sky b {
+  position: absolute; display: block; border-radius: 50%;
+  filter: blur(90px); opacity: .5;
+  will-change: transform;
+}
+#sky b:nth-child(1) { width: 46vw; height: 46vw; left: -8vw;  top: -12vw;
+  background: #1E5BC6; animation: drift1 26s var(--ease-io) infinite alternate; }
+#sky b:nth-child(2) { width: 38vw; height: 38vw; right: -6vw; top: 18vh;
+  background: #0F6FBF; animation: drift2 31s var(--ease-io) infinite alternate; }
+#sky b:nth-child(3) { width: 30vw; height: 30vw; left: 32vw;  bottom: -14vw;
+  background: #2B3F91; animation: drift3 24s var(--ease-io) infinite alternate; }
+
+@keyframes drift1 { to { transform: translate3d(14vw, 10vh, 0) scale(1.18) } }
+@keyframes drift2 { to { transform: translate3d(-12vw, -8vh, 0) scale(1.1) } }
+@keyframes drift3 { to { transform: translate3d(8vw, -12vh, 0) scale(1.22) } }
+
+/* a whisper of grain stops the gradient banding on a projector */
+#grain {
+  position: fixed; inset: 0; z-index: 1; pointer-events: none; opacity: .16;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='.5'/%3E%3C/svg%3E");
+}
+
+/* ── Stage ─────────────────────────────────────────────────────────── */
+
+#stage {
+  position: fixed; inset: 0; z-index: 2;
+  display: grid; place-items: center;
+  padding: 6vh 6vw;
+}
+
+/* the slot a scene lives in — grid so 1/2/3 elements each get a good shape */
+#slots {
+  display: grid; gap: 3.4vw;
+  width: 100%; height: 100%;
+  align-items: center; justify-items: center;
+  transition: grid-template-columns .8s var(--ease-out);
+}
+#slots[data-n="1"] { grid-template-columns: 1fr; }
+#slots[data-n="2"] { grid-template-columns: 1fr 1fr; }
+#slots[data-n="3"] { grid-template-columns: 1.4fr 1fr; grid-template-rows: 1fr 1fr; }
+#slots[data-n="3"] > .scene:first-child { grid-row: span 2; }
+
+/* ── A scene ────────────────────────────────────────────────────────── */
+
+.scene {
+  position: relative;
+  width: 100%; max-height: 100%;
+  display: flex; flex-direction: column; justify-content: center;
+  transform-origin: center;
+  animation: scene-in 1.05s var(--ease-out) both;
+}
+@keyframes scene-in {
+  from { opacity: 0; transform: translateY(46px) scale(.965); filter: blur(14px) }
+  to   { opacity: 1; transform: none;                          filter: blur(0) }
+}
+
+/* leaving is a real gesture, not a disappearance */
+.scene.out { animation: scene-out .72s var(--ease-io) both; }
+@keyframes scene-out {
+  to { opacity: 0; transform: translateY(-34px) scale(.955); filter: blur(16px) }
+}
+
+/* when something else is the subject, recede — don't compete */
+.scene.recede { opacity: .42; transform: scale(.9); filter: saturate(.6);
+                transition: opacity .8s var(--ease-out), transform .8s var(--ease-out),
+                            filter .8s var(--ease-out); }
+
+/* ── Typography — the main event ─────────────────────────────────────── */
+
+.t-kicker {
+  font-family: var(--font-body);
+  font-size: clamp(11px, .95vw, 17px);
+  letter-spacing: .30em; text-transform: uppercase;
+  color: var(--on-lo); margin-bottom: 1.6vh;
+  display: flex; align-items: center; gap: .8em;
+}
+.t-kicker::before {
+  content: ""; width: 2.4em; height: 2px; background: var(--accent, var(--g-blue));
+  border-radius: 2px;
+}
+
+/* the hero line: enormous, light, gradient-filled */
+.t-hero {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: clamp(38px, 6.2vw, 132px);
+  line-height: .98; letter-spacing: -.028em;
+  background-image: var(--grad-hero);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.t-hero.tight { font-size: clamp(30px, 4.2vw, 84px); }
+
+/* bracketed — for a term being defined */
+.t-bracket {
+  display: inline-flex; align-items: center; gap: .5em;
+  font-family: var(--font-display); font-weight: 700;
+  font-size: clamp(30px, 4.6vw, 92px);
+  color: var(--g-blue); letter-spacing: -.02em;
+}
+.t-bracket::before, .t-bracket::after {
+  content: "["; font-weight: 300; opacity: .82;
+  font-size: 1.5em; line-height: .7;
+}
+.t-bracket::after { content: "]"; }
+
+.t-sub {
+  font-size: clamp(15px, 1.35vw, 26px);
+  color: var(--on-mid); margin-top: 2.2vh; max-width: 34ch;
+  line-height: 1.45; font-weight: 400;
+}
+
+/* per-word reveal — reads as speech becoming type.
+   inline-block gives each word its own box, which means the PARENT's
+   background-clip:text can no longer paint it: the word inherits the
+   transparent fill and has no background of its own, so it vanishes.
+   Each word therefore carries the gradient itself. */
+.w { display: inline-block; animation: word-in .8s var(--ease-out) both; }
+.t-hero .w { background-image: var(--grad-hero); }
+.t-num  .w { background-image: var(--grad-num); }
+.t-hero .w, .t-num .w {
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+@keyframes word-in {
+  from { opacity: 0; transform: translateY(.42em); filter: blur(7px) }
+}
+
+/* ── Numbers ────────────────────────────────────────────────────────── */
+
+.t-num {
+  font-family: var(--font-display); font-weight: 500;
+  font-size: clamp(58px, 11vw, 210px);
+  line-height: .88; letter-spacing: -.045em;
+  background-image: var(--grad-num);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent;
+  font-variant-numeric: tabular-nums;
+}
+.t-numlabel {
+  font-size: clamp(13px, 1.15vw, 22px); color: var(--on-lo);
+  letter-spacing: .06em; margin-top: 1.4vh;
+}
+.t-delta { color: var(--g-green); font-size: clamp(12px, .95vw, 18px); margin-top: .8vh; }
+
+/* ── Emoji ──────────────────────────────────────────────────────────── */
+
+.t-emoji {
+  font-size: clamp(52px, 8.5vw, 160px); line-height: 1;
+  margin-bottom: 2.2vh;
+  filter: drop-shadow(0 14px 40px rgba(0,0,0,.45));
+  animation: emoji-in 1.1s var(--ease-out) both;
+}
+@keyframes emoji-in {
+  from { opacity: 0; transform: scale(.55) rotate(-9deg) }
+  60%  { transform: scale(1.07) rotate(2deg) }
+}
+
+/* ── Glass panel — for anything with internal structure ─────────────── */
+
+.glass {
+  background: linear-gradient(158deg, rgba(255,255,255,.13), rgba(255,255,255,.05));
+  border: 1px solid rgba(255,255,255,.16);
+  border-radius: 26px;
+  backdrop-filter: blur(24px) saturate(150%);
+  -webkit-backdrop-filter: blur(24px) saturate(150%);
+  box-shadow: 0 30px 90px -30px rgba(0,0,0,.75), inset 0 1px 0 rgba(255,255,255,.14);
+  padding: clamp(20px, 2.4vw, 40px);
+  width: 100%;
+}
+
+/* ── Media ──────────────────────────────────────────────────────────── */
+
+.shot {
+  position: relative; width: 100%; border-radius: 26px; overflow: hidden;
+  box-shadow: 0 40px 110px -32px rgba(0,0,0,.85);
+  background: rgba(255,255,255,.05);
+}
+.shot img, .shot iframe { display: block; width: 100%; border: 0; }
+.shot img { animation: shot-in 1.5s var(--ease-out) both; }
+@keyframes shot-in { from { opacity: 0; transform: scale(1.07) } }
+/* a soft vignette so text over/near it stays readable */
+.shot::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(to top, rgba(6,18,38,.55), transparent 46%);
+}
+.shot .cap {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 2;
+  padding: 22px 26px; font-size: clamp(13px, 1.05vw, 19px); color: var(--on-hi);
+}
+
+.loading {
+  width: 100%; aspect-ratio: 16/10; border-radius: 26px;
+  background: linear-gradient(100deg, rgba(255,255,255,.05) 30%,
+              rgba(255,255,255,.13) 50%, rgba(255,255,255,.05) 70%);
+  background-size: 200% 100%; animation: sh 1.6s linear infinite;
+}
+@keyframes sh { to { background-position: -200% 0 } }
+
+/* ── Table / list inside glass ──────────────────────────────────────── */
+
+.rows { width: 100%; border-collapse: collapse; }
+.rows th {
+  text-align: left; font-weight: 500; padding: 0 0 14px;
+  font-size: clamp(11px, .82vw, 15px); letter-spacing: .16em;
+  text-transform: uppercase; color: var(--on-lo);
+}
+.rows td {
+  padding: 15px 0; font-size: clamp(15px, 1.25vw, 25px);
+  border-top: 1px solid rgba(255,255,255,.1); color: var(--on-hi);
+}
+.rows td:first-child { color: var(--on-mid); }
+
+.bullets { list-style: none; margin: 0; padding: 0; }
+.bullets li {
+  display: flex; gap: .85em; align-items: baseline;
+  font-size: clamp(16px, 1.5vw, 30px); color: var(--on-hi);
+  padding: .5em 0; line-height: 1.3;
+  animation: word-in .8s var(--ease-out) both;
+}
+.bullets li::before {
+  content: ""; flex: none; width: .42em; height: .42em; border-radius: 50%;
+  background: var(--accent, var(--g-blue)); transform: translateY(-.15em);
+}
+
+/* ── Math ───────────────────────────────────────────────────────────── */
+.math-wrap { display: flex; justify-content: center; padding: 1.5vh 0; }
+.math-wrap .katex { font-size: clamp(24px, 3.4vw, 66px); color: var(--on-hi); }
+.math-wrap .katex-display { margin: 0; }
+
+/* ── Chrome: the only persistent pixels ─────────────────────────────── */
+
+#hud {
+  position: fixed; z-index: 20; left: 3vw; bottom: 3.4vh;
+  display: flex; align-items: center; gap: 14px;
+  font-size: 13px; color: var(--on-lo);
+  transition: opacity .5s var(--ease-out);
+}
+#caption {
+  max-width: 46ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: rgba(185,208,240,.55);
+}
+
+.core-dots { display: flex; align-items: center; gap: 7px; }
+.core-dots i {
+  width: 10px; height: 10px; border-radius: 50%; display: block;
+  animation: dot-idle 2.4s var(--ease-out) infinite;
+}
+.core-dots i:nth-child(1) { background: var(--g-blue);   animation-delay: 0s   }
+.core-dots i:nth-child(2) { background: var(--g-red);    animation-delay: .15s }
+.core-dots i:nth-child(3) { background: var(--g-yellow); animation-delay: .3s  }
+.core-dots i:nth-child(4) { background: var(--g-green);  animation-delay: .45s }
+@keyframes dot-idle { 0%,100% { transform: scale(.7); opacity: .4 }
+                      50%     { transform: scale(1);  opacity: 1  } }
+.core-dots.thinking i { animation: dot-think .68s var(--ease-out) infinite }
+@keyframes dot-think { 0%,100% { transform: translateY(0) scale(.8) }
+                       50%     { transform: translateY(-7px) scale(1.1) } }
+.core-dots.muted i { animation: none; opacity: .22; filter: grayscale(1) }
+
+body.clean #hud, body.clean #dock, body.clean .cam-wrap { opacity: 0; pointer-events: none; }
+
+/* ── Empty state ────────────────────────────────────────────────────── */
+#idle {
+  position: fixed; inset: 0; z-index: 3; display: grid; place-items: center;
+  transition: opacity .9s var(--ease-out);
+}
+#idle .core-dots { transform: scale(2.6) }
+#idle.gone { opacity: 0; pointer-events: none; }

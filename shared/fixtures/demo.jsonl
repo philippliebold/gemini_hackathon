@@ -1,20 +1,29 @@
 {"delay": 0.0, "op": "canvas.clear", "payload": {}}
-{"delay": 0.4, "op": "status", "payload": {"state": "listening"}}
-{"delay": 1.6, "op": "status", "payload": {"state": "thinking", "transcript": "nobody wants to build slides for a ten minute brainstorm"}}
-{"delay": 0.7, "op": "block.add", "payload": {"id": "b_1", "type": "hero", "x": -700, "y": -260, "w": 380, "h": 200, "enter": "pop", "data": {"emoji": "\ud83d\uddd3\ufe0f", "title": "No more slides", "sub": "Just talk", "big": true, "accent": "blue"}}}
-{"delay": 1.5, "op": "status", "payload": {"state": "listening", "transcript": "the screen should just build itself while you speak"}}
-{"delay": 1.0, "op": "block.add", "payload": {"id": "b_2", "type": "diagram", "x": -260, "y": -280, "w": 560, "h": 300, "enter": "draw", "data": {"title": "The loop", "mermaid": "graph LR\n  M[mic] --> G[Gemini Live]\n  G --> O[canvas ops]\n  G --> T[tool calls]\n  O --> S[screen]\n  T --> S", "accent": "slate"}}}
-{"delay": 0.5, "op": "link.add", "payload": {"id": "l_1", "from": "b_1", "to": "b_2", "label": "so instead", "style": "dashed"}}
-{"delay": 1.8, "op": "status", "payload": {"state": "thinking", "transcript": "sentence to pixels in about one point four seconds"}}
-{"delay": 0.8, "op": "block.add", "payload": {"id": "b_3", "type": "stat", "x": 380, "y": -260, "w": 320, "h": 200, "enter": "pop", "data": {"value": "1.4s", "label": "sentence to pixels", "delta": "target < 2s", "accent": "green"}}}
-{"delay": 2.0, "op": "status", "payload": {"state": "thinking", "transcript": "here's where that time actually goes"}}
-{"delay": 0.9, "op": "block.add", "payload": {"id": "b_4", "type": "chart", "x": -700, "y": 20, "w": 470, "h": 320, "enter": "fade", "data": {"title": "Where the time goes", "kind": "bar", "unit": "ms", "series": [{"label": "capture", "value": 40}, {"label": "model", "value": 900}, {"label": "ws", "value": 30}, {"label": "render", "value": 150}], "accent": "blue"}}}
-{"delay": 2.2, "op": "status", "payload": {"state": "thinking", "transcript": "picture the golden gate bridge at sunset, fog rolling in"}}
-{"delay": 0.7, "op": "block.add", "payload": {"id": "b_5", "type": "image", "x": -190, "y": 60, "w": 420, "h": 360, "enter": "fade", "data": {"src": null, "caption": "imagining\u2026", "alt": "Golden Gate at golden hour", "accent": "yellow"}}}
-{"delay": 3.4, "op": "block.update", "payload": {"id": "b_5", "data": {"src": "./assets/golden-gate.jpg", "caption": "Golden hour, looking south"}}}
-{"delay": 1.9, "op": "status", "payload": {"state": "thinking", "transcript": "the cable follows a parabola, y equals w x squared over two H"}}
-{"delay": 0.8, "op": "block.add", "payload": {"id": "b_6", "type": "math", "x": 290, "y": 60, "w": 420, "h": 190, "enter": "fade", "data": {"title": "Cable curve", "tex": "y = \\frac{wx^2}{2H}", "note": "under uniform load", "accent": "red"}}}
-{"delay": 2.1, "op": "status", "payload": {"state": "thinking", "transcript": "i'm at one-north right now, how do i get to fusionopolis"}}
-{"delay": 0.9, "op": "block.add", "payload": {"id": "b_7", "type": "map", "x": 290, "y": 290, "w": 420, "h": 330, "enter": "fade", "data": {"from": "one-north", "to": "Fusionopolis", "mode": "walking", "duration": "6 min", "distance": "450 m", "embed_url": "https://www.google.com/maps/embed/v1/directions?key=YOUR_MAPS_KEY&origin=one-north+MRT+Singapore&destination=Fusionopolis+Singapore&mode=walking", "accent": "green"}}}
-{"delay": 1.4, "op": "block.focus", "payload": {"id": "b_5"}}
-{"delay": 2.0, "op": "status", "payload": {"state": "listening", "transcript": ""}}
+{"delay": 0.6, "op": "status", "payload": {"state": "listening", "transcript": ""}}
+{"delay": 2.2, "op": "status", "payload": {"state": "thinking", "transcript": "so nobody actually wants to build slides for a ten minute talk"}}
+{"delay": 0.8, "op": "block.add", "payload": {"id": "s1", "type": "hero", "x": 0, "y": 0, "w": 0, "h": 0, "enter": "fade", "data": {"emoji": "\ud83d\uddd3\ufe0f", "title": "No more slides", "sub": "Just talk. The screen keeps up.", "accent": "blue"}}}
+{"delay": 4.5, "op": "status", "payload": {"state": "thinking", "transcript": "the screen should just build itself while you speak"}}
+{"delay": 0.9, "op": "block.add", "payload": {"id": "s2", "type": "term", "x": 0, "y": 0, "w": 0, "h": 0, "enter": "fade", "data": {"term": "Live canvas", "sub": "Speech in. Pictures out. Nothing prepared.", "accent": "blue"}}}
+{"delay": 2.6, "op": "block.remove", "payload": {"id": "s1"}}
+{"delay": 3.8, "op": "status", "payload": {"state": "thinking", "transcript": "sentence to pixels in about one point four seconds"}}
+{"delay": 0.8, "op": "block.add", "payload": {"id": "s3", "type": "stat", "x": 0, "y": 0, "w": 0, "h": 0, "enter": "fade", "data": {"value": "1.4s", "label": "sentence to pixels", "delta": "target under 2s", "accent": "green"}}}
+{"delay": 3.6, "op": "status", "payload": {"state": "thinking", "transcript": "and here's where that time actually goes"}}
+{"delay": 0.9, "op": "block.add", "payload": {"id": "s4", "type": "chart", "x": 0, "y": 0, "w": 0, "h": 0, "enter": "fade", "data": {"title": "Latency budget", "kind": "bar", "unit": "ms", "series": [{"label": "capture", "value": 40}, {"label": "model", "value": 900}, {"label": "websocket", "value": 30}, {"label": "render", "value": 150}], "accent": "blue"}}}
+{"delay": 1.2, "op": "block.remove", "payload": {"id": "s2"}}
+{"delay": 4.4, "op": "status", "payload": {"state": "thinking", "transcript": "picture the golden gate bridge at sunset, fog rolling in"}}
+{"delay": 0.7, "op": "block.add", "payload": {"id": "s5", "type": "image", "x": 0, "y": 0, "w": 0, "h": 0, "enter": "fade", "data": {"src": null, "caption": "imagining\u2026", "alt": "Golden Gate", "accent": "yellow"}}}
+{"delay": 3.0, "op": "block.update", "payload": {"id": "s5", "data": {"src": "./assets/golden-gate.jpg", "caption": "Golden Gate \u2014 golden hour, looking south"}}}
+{"delay": 1.0, "op": "block.remove", "payload": {"id": "s3"}}
+{"delay": 0.8, "op": "block.remove", "payload": {"id": "s4"}}
+{"delay": 4.2, "op": "status", "payload": {"state": "thinking", "transcript": "the main cable follows a parabola, y equals w x squared over two H"}}
+{"delay": 0.8, "op": "block.add", "payload": {"id": "s6", "type": "math", "x": 0, "y": 0, "w": 0, "h": 0, "enter": "fade", "data": {"title": "Cable curve", "tex": "y = \\frac{wx^2}{2H}", "note": "under uniform load", "accent": "red"}}}
+{"delay": 4.6, "op": "status", "payload": {"state": "thinking", "transcript": "i'm at one-north right now, how do i get to fusionopolis"}}
+{"delay": 0.9, "op": "block.add", "payload": {"id": "s7", "type": "map", "x": 0, "y": 0, "w": 0, "h": 0, "enter": "fade", "data": {"from": "one-north", "to": "Fusionopolis", "mode": "walking", "duration": "6 min", "distance": "450 m", "accent": "green", "embed_url": "https://www.google.com/maps/embed/v1/directions?key=YOUR_MAPS_KEY&origin=one-north+MRT+Singapore&destination=Fusionopolis+Singapore&mode=walking"}}}
+{"delay": 1.4, "op": "block.remove", "payload": {"id": "s5"}}
+{"delay": 2.2, "op": "block.remove", "payload": {"id": "s6"}}
+{"delay": 4.0, "op": "status", "payload": {"state": "thinking", "transcript": "so what you end up with is reusable knowledge, not a deck"}}
+{"delay": 0.9, "op": "block.add", "payload": {"id": "s8", "type": "term", "x": 0, "y": 0, "w": 0, "h": 0, "enter": "fade", "data": {"term": "Reusable knowledge", "sub": "The session is the artefact. Nothing to write up.", "accent": "blue"}}}
+{"delay": 2.0, "op": "block.remove", "payload": {"id": "s7"}}
+{"delay": 4.0, "op": "status", "payload": {"state": "listening", "transcript": ""}}
+{"delay": 3.0, "op": "block.remove", "payload": {"id": "s8"}}
+{"delay": 1.5, "op": "status", "payload": {"state": "idle", "transcript": ""}}
