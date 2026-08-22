@@ -27,15 +27,17 @@ import numpy as np
 MAX_MICS = 4
 
 # Tuning. Defaults are for phones held at conversational distance in a loud room.
-# Measured in the demo room with nobody talking: p10 0.003, peaks to 0.016. The old
-# 0.010 gate sat inside that, so ambient noise opened turns and the model drew from
-# nothing ("Poking Out Ears").
+# Measured in this room over 40 s, from the live roster rather than guessed:
+#   room noise   0.0044 -> 0.0171
+#   real speech  0.0185 -> 0.0616
+# 0.013 sat INSIDE the noise band, which is why nonsense kept appearing on screen
+# ("Poking Out Ears", "pubg") with nobody talking. 0.021 clears the noise ceiling
+# with margin and still sits well under the quietest speech seen.
 #
-# 0.013 is deliberately biased LOW. The two failure modes are not symmetric: a gate
-# that is too low draws on noise, which you can see and fix mid-demo; a gate that is
-# too high hears nothing at all, and looks identical to the model being broken.
-# Calibrate the actual room with `python backend/mic_level.py` and set MIC_GATE.
-GATE_RMS = float(os.getenv("MIC_GATE", "0.013"))
+# Biased slightly low on purpose: too low draws on noise, which is visible and
+# fixable mid-demo; too high hears nothing and is indistinguishable from a broken
+# model. Re-measure in the venue with `python backend/mic_level.py`.
+GATE_RMS = float(os.getenv("MIC_GATE", "0.021"))
 HANGOVER_S = 0.70       # holder keeps the FLOOR this long after going quiet
 TURN_SILENCE_S = 0.35   # ...but the TURN closes this early. See below.
 STEAL_MARGIN = 1.8      # a rival must be this much louder to interrupt
