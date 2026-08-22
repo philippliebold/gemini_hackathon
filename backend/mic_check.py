@@ -78,6 +78,20 @@ async def run() -> int:
         print("openssl unavailable — cannot test the TLS mic path")
         return 1
 
+    # A running `main.py` already owns this port. Without this check the clients
+    # below silently connect to THAT server, whose Floor is a different object, and
+    # every assertion fails for a reason that has nothing to do with the code.
+    import socket
+    probe = socket.socket()
+    try:
+        probe.bind(("127.0.0.1", CFG.mic_port))
+    except OSError:
+        print(f"\033[31mport {CFG.mic_port} is already in use\033[0m — a backend is "
+              f"running.\nStop it first:  pkill -f 'main.py'")
+        return 1
+    finally:
+        probe.close()
+
     task = asyncio.create_task(mic_server.serve_mics(
         floor,
         lambda pcm: got_audio.append((time.perf_counter(), pcm)),
