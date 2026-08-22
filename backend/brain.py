@@ -53,6 +53,7 @@ def worth_asking(line: str) -> bool:
         return len(words) >= 2
     return len(t) >= MIN_CHARS and len(words) >= 4
 WINDOW = 6               # utterances of context handed over
+REPROBE_S = 45.0         # how often to try to climb back to the primary model
 DEADLINE_S = 4.5         # abandon a decision that misses the moment
 MAX_INFLIGHT = 2         # a slow call must not block the next sentence
 
@@ -110,6 +111,7 @@ class Brain:
         self.skipped = 0
         self.enabled = False        # flipped from the screen; see server.on_presenter
         self._probed = False
+        self._demoted_at = 0.0      # when we last fell back off the primary
 
     def _cfg(self, think: int | None) -> types.GenerateContentConfig:
         c = types.GenerateContentConfig(
@@ -144,7 +146,11 @@ class Brain:
             print(f"[brain] driving the canvas with {model} ({tag}) "
                   f"— probe {time.time()-t0:.2f}s")
             if model != CFG.model:
-                print(f"[brain] NOTE: {CFG.model} was not usable; see README")
+                self._demoted_at = time.time()
+                print(f"[brain] NOTE: on a fallback; retrying {CFG.model} "
+                      f"every {REPROBE_S:.0f}s")
+            else:
+                self._demoted_at = 0.0
             return
         print("[brain] no usable model — the canvas will stay blank")
 
@@ -223,6 +229,25 @@ class Brain:
             self.broadcast(ops.status("listening"))
         finally:
             self._inflight -= 1
+            await self._maybe_reclaim_primary()
+
+    async def _maybe_reclaim_primary(self) -> None:
+        """gemini-3.7-flash is the model this project is meant to run on, so a
+        fallback is a temporary state, not a decision. Retry the primary on a timer
+        so enabling billing takes effect without restarting mid-talk."""
+        if not self._demoted_at or time.time() - self._demoted_at < REPROBE_S:
+            return
+        self._demoted_at = time.time()          # don't hammer it
+        try:
+            await self.client.aio.models.generate_content(
+                model=CFG.model, contents="ok", config=self._cfg(0))
+        except Exception:                        # noqa: BLE001 - still unavailable
+            return
+        self.model, self.think = CFG.model, 0
+        self._demoted_at = 0.0
+        print(f"[brain] reclaimed {CFG.model} — thinking off")
+        import server
+        server.push_mics()
 
     async def _consider(self, line: str) -> None:
         tagged = f"{self.speaker}: {line}" if self.speaker else line

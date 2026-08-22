@@ -5,6 +5,7 @@ import json
 import websockets
 
 import canvas
+import mics
 import ops
 from config import CFG
 
@@ -51,6 +52,7 @@ def mics_payload() -> dict:
         "devices": devices() if callable(devices) else devices,
         "mac": {"active": bool(mac and mac.active),
                 "device": mac.device if mac else None},
+        "gate": mics.GATE_RMS,
         "brain": {"enabled": bool(brain and brain.enabled),
                   "model": (brain.model if brain and brain.enabled else None)},
     }
@@ -115,6 +117,12 @@ async def on_presenter(action: str | None) -> None:
         if mac is not None:
             mac.off()
             push_mics()
+    elif action and action.startswith("mic_gate:"):
+        try:
+            mics.set_gate(float(action.split(":", 1)[1]))
+        except ValueError:
+            return
+        push_mics()
     elif action in ("brain_on", "brain_off"):
         brain = CONTROL.get("brain")
         if brain is not None:

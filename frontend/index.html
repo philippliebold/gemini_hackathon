@@ -104,6 +104,19 @@
         <div class="phone-step"><b>3</b> Accept the certificate warning once</div>
         <a id="phone-url" class="phone-url" target="_blank" rel="noreferrer"></a>
         <div id="phone-live" class="phone-live"></div>
+        <div class="gate-row">
+          <div class="gate-head">
+            <span>Sensitivity</span>
+            <span id="gate-val" class="gate-val"></span>
+          </div>
+          <!-- live level behind the handle: set it while talking and you can see
+               exactly where your voice sits against the threshold -->
+          <div class="gate-meter"><i id="gate-level"></i><b id="gate-mark"></b></div>
+          <input id="gate" class="gate-slider" type="range"
+                 min="0" max="0.08" step="0.001">
+          <div class="gate-hint">Drag left if it misses you · right if it draws on
+            room noise</div>
+        </div>
       </div>
     </div>
     <button id="phone-close" class="picker-cancel">Done</button>

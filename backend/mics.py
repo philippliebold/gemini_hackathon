@@ -79,6 +79,19 @@ def rms_of(pcm: bytes) -> float:
     return float(np.sqrt(np.mean(a.astype(np.float32) ** 2)) / 32768.0)
 
 
+def set_gate(value: float) -> float:
+    """Change the speech gate while the talk is running.
+
+    Every room is different and the only honest calibration is a human watching
+    their own level against the threshold, so this is exposed on the screen rather
+    than buried in an env var. Clamped to where the value still means something:
+    0 forwards everything, above ~0.12 rejects normal speech.
+    """
+    global GATE_RMS
+    GATE_RMS = max(0.0, min(0.12, float(value)))
+    return GATE_RMS
+
+
 class Floor:
     """Decides whose audio reaches the model."""
 
@@ -88,7 +101,7 @@ class Floor:
                  gate_turns: bool | None = None) -> None:
         self.mics: dict[str, Mic] = {}
         self.holder: str | None = None
-        self.gate = gate
+        self._gate_override = gate if gate != GATE_RMS else None
         self.hangover = hangover
         self.steal_margin = steal_margin
         self.turn_silence = turn_silence
@@ -98,6 +111,11 @@ class Floor:
         self.switches = 0
         self.announced: str | None = None
         self.turn_open = False
+
+    @property
+    def gate(self) -> float:
+        """Follow the module-level gate unless this Floor was given its own."""
+        return GATE_RMS if self._gate_override is None else self._gate_override
 
     # --- roster -------------------------------------------------------------
     def join(self, label: str | None = None) -> Mic:

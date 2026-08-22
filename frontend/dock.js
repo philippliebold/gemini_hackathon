@@ -31,6 +31,10 @@ const dock = {
   plive:  document.getElementById("phone-live"),
   pclose: document.getElementById("phone-close"),
   brain:  document.getElementById("brain-btn"),
+  gate:   document.getElementById("gate"),
+  gateV:  document.getElementById("gate-val"),
+  gateL:  document.getElementById("gate-level"),
+  gateM:  document.getElementById("gate-mark"),
 };
 
 /* --- auto-hide: the presenter faces the room, so chrome shouldn't linger --- */
@@ -78,7 +82,21 @@ function onMics(p) {
     dock.qr.innerHTML = p.qr_svg;          /* rendered by the backend, no JS lib */
     dock.qr.dataset.done = "1";
   }
+  if (p.gate !== undefined) renderGate(p.gate);
   renderRoster();
+}
+
+/* Track is scaled so 0.08 fills it: quiet speech lands near 20%, a loud room near
+   25%, so the useful range is the left third and needs the room. */
+let gateDragging = false;
+function renderGate(gate) {
+  if (!dock.gate) return;
+  if (!gateDragging) dock.gate.value = gate;
+  dock.gateV.textContent = gate.toFixed(3);
+  dock.gateM.style.left = `${Math.min(100, (gate / 0.08) * 100)}%`;
+  const peak = Math.max(0, ...micState.roster.map((m) => m.rms || 0));
+  dock.gateL.style.width = `${Math.min(100, (peak / 0.08) * 100)}%`;
+  dock.gateL.classList.toggle("over", peak >= gate);
 }
 
 /* A chip per live mic. `holding` is the one whose audio is actually reaching the
@@ -186,6 +204,17 @@ if (dock.brain) dock.brain.onclick = () => {
   window.sendPresenter(next ? "brain_on" : "brain_off");
   poke();
 };
+if (dock.gate) {
+  dock.gate.oninput = () => {
+    gateDragging = true;
+    dock.gateV.textContent = (+dock.gate.value).toFixed(3);
+    dock.gateM.style.left = `${(dock.gate.value / 0.08) * 100}%`;
+  };
+  dock.gate.onchange = () => {
+    gateDragging = false;
+    window.sendPresenter(`mic_gate:${dock.gate.value}`);
+  };
+}
 window.CoDock = { onMics };
 dock.clear.onclick = () => { window.CoStage.clearAll(); window.sendPresenter("clear"); };
 

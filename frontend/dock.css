@@ -244,3 +244,26 @@ body.clean.stirring .reveal {
 .dock-btn.ghost .msym { font-size: 19px; }
 .dock-btn.ghost.on { opacity: 1; background: rgba(168,107,255,.26); }
 .dock-btn.ghost.on .msym { color: #D3B4FF; font-variation-settings: "FILL" 1; }
+
+
+/* ---------- sensitivity ---------- */
+.gate-row { margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,.12); }
+.gate-head { display: flex; justify-content: space-between; align-items: baseline;
+             font-size: 13px; color: #C9DAF5; }
+.gate-val { font-family: "Roboto Mono", ui-monospace, monospace; color: #7FB0FF; }
+.gate-meter {
+  position: relative; height: 8px; margin: 9px 0 2px;
+  background: rgba(255,255,255,.10); border-radius: 999px; overflow: hidden;
+}
+.gate-meter i {
+  position: absolute; inset: 0 auto 0 0; width: 0;
+  background: #5F7899; border-radius: 999px; transition: width .1s linear;
+}
+/* green the instant the voice clears the threshold — that is the whole signal */
+.gate-meter i.over { background: #34A853; }
+.gate-meter b {
+  position: absolute; top: -3px; bottom: -3px; width: 2px;
+  background: #EAF2FF; border-radius: 2px;
+}
+.gate-slider { width: 100%; accent-color: #7FB0FF; margin: 2px 0 0; }
+.gate-hint { font-size: 11px; color: #5F6368; line-height: 1.35; }
