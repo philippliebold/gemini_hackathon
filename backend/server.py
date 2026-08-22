@@ -8,6 +8,10 @@ import canvas
 import ops
 from config import CFG
 
+# Set by main.py. Lets the screen drive the mics without server.py importing the
+# audio stack (which would drag sounddevice into mock_server.py).
+CONTROL: dict = {}
+
 CLIENTS: set = set()
 HISTORY: list[dict] = []   # replay to late joiners so a refresh never loses the canvas
 MAX_HISTORY = 500
@@ -33,12 +37,42 @@ async def _safe_send(ws, msg: str) -> None:
         CLIENTS.discard(ws)
 
 
+def mics_payload() -> dict:
+    """Everything the screen needs to show the join code and who is live."""
+    floor = CONTROL.get("floor")
+    mac = CONTROL.get("macmic")
+    devices = CONTROL.get("devices") or (lambda: [])
+    return {
+        "join_url": CONTROL.get("join_url"),
+        "qr_svg": CONTROL.get("qr_svg"),
+        "max_mics": CONTROL.get("max_mics", 4),
+        "roster": floor.roster() if floor is not None else [],
+        "devices": devices() if callable(devices) else devices,
+        "mac": {"active": bool(mac and mac.active),
+                "device": mac.device if mac else None},
+    }
+
+
+def push_mics() -> None:
+    """Broadcast mic state. Safe to call from anywhere; never raises."""
+    try:
+        broadcast(ops.mics_state(mics_payload()))
+    except Exception as e:                                # noqa: BLE001
+        print(f"[ws] mics.state failed: {e}")
+
+
 async def handler(ws):
     CLIENTS.add(ws)
     print(f"[ws] client connected ({len(CLIENTS)} total)")
     try:
         for frame in HISTORY:
             await ws.send(ops.dumps(frame))
+        # A late joiner needs the join code immediately, not on the next change.
+        if CONTROL:
+            await ws.send(ops.dumps(ops.mics_state(mics_payload())))
+        # NOTE: a client that sends a command *during* the replay above can have it
+        # dropped if it disconnects mid-send. The display holds its socket open, so
+        # this only bites short-lived scripted clients.
         async for raw in ws:
             try:
                 msg = json.loads(raw)
@@ -65,6 +99,21 @@ async def on_presenter(action: str | None) -> None:
     elif action == "undo":
         for frame in canvas.undo_last():
             broadcast(frame)
+    elif action and action.startswith("mic_device:"):
+        mac = CONTROL.get("macmic")
+        if mac is not None:
+            try:
+                mac.select(int(action.split(":", 1)[1]))
+            except ValueError:
+                return
+            push_mics()
+    elif action == "mic_off":
+        mac = CONTROL.get("macmic")
+        if mac is not None:
+            mac.off()
+            push_mics()
+    elif action == "mics_refresh":
+        push_mics()
     # TODO: pause / resume
 
 

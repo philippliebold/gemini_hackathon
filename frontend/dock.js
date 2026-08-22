@@ -1,14 +1,17 @@
 /* ---------- control dock ----------
  * Up to four microphones and a camera, driven from the screen.
  *
- * Mic capture happens in the browser purely so the room can SEE which mic is
- * live and which is muted — the level meters are real getUserMedia audio.
- * Routing that audio into Gemini stays a backend concern; every action is
- * mirrored to the backend over the presenter channel so it can follow.
+ * The mic chips are NOT local capture. They mirror the backend's floor: who is
+ * connected, who currently owns the audio stream, and how loud they are. That is
+ * the only honest source, because the backend is what actually feeds Gemini — a
+ * browser-side meter can look alive while nothing reaches the model.
+ *
+ * The Mac's own input is chosen here too; the backend opens the device and can
+ * switch it mid-session. Phones join over the QR panel.
  */
-const MAX_MICS = 4;
-const mics = new Map();          // slot -> {slot, stream, track, ctx, el, muted}
+let MAX_MICS = 4;
 let camStream = null;
+let micState = { roster: [], devices: [], mac: { active: false, device: null } };
 
 const dock = {
   root:   document.getElementById("dock"),
@@ -21,6 +24,12 @@ const dock = {
   picker: document.getElementById("picker"),
   list:   document.getElementById("picker-list"),
   cancel: document.getElementById("picker-cancel"),
+  phone:  document.getElementById("phone-btn"),
+  panel:  document.getElementById("phone"),
+  qr:     document.getElementById("phone-qr"),
+  url:    document.getElementById("phone-url"),
+  plive:  document.getElementById("phone-live"),
+  pclose: document.getElementById("phone-close"),
 };
 
 /* --- auto-hide: the presenter faces the room, so chrome shouldn't linger --- */
@@ -35,132 +44,91 @@ function poke() {
 ["mousemove", "keydown", "touchstart"].forEach((e) => addEventListener(e, poke));
 poke();
 
-/* --- device picker --------------------------------------------------- */
-async function pickDevice() {
-  /* labels are blank until permission is granted once */
-  try { (await navigator.mediaDevices.getUserMedia({ audio: true }))
-          .getTracks().forEach((t) => t.stop()); } catch (e) { /* denied */ }
+/* --- backend state ------------------------------------------------------
+ * One frame from the backend replaces all local guessing about mics. */
+function onMics(p) {
+  micState = {
+    roster: p.roster || [],
+    devices: p.devices || [],
+    mac: p.mac || { active: false, device: null },
+  };
+  MAX_MICS = p.max_mics || 4;
 
-  let devs = [];
-  try {
-    devs = (await navigator.mediaDevices.enumerateDevices())
-             .filter((d) => d.kind === "audioinput");
-  } catch (e) { /* leave empty */ }
+  if (p.join_url) {
+    dock.url.textContent = p.join_url;
+    dock.url.href = p.join_url;
+  }
+  if (p.qr_svg && dock.qr.dataset.done !== "1") {
+    dock.qr.innerHTML = p.qr_svg;          /* rendered by the backend, no JS lib */
+    dock.qr.dataset.done = "1";
+  }
+  renderRoster();
+}
 
-  const used = new Set([...mics.values()].map((m) => m.deviceId));
-  dock.list.innerHTML = devs.length
-    ? devs.map((d, i) => `
-        <button class="picker-item" data-id="${d.deviceId}"
-                ${used.has(d.deviceId) ? "disabled" : ""}>
-          <span class="msym">${used.has(d.deviceId) ? "check_circle" : "mic"}</span>
-          <span>${(d.label || `Microphone ${i + 1}`).replace(/</g, "")}</span>
+/* A chip per live mic. `holding` is the one whose audio is actually reaching the
+   model right now — the single most useful thing to see before you speak. */
+function renderRoster() {
+  const r = micState.roster;
+  dock.row.innerHTML = r.map((m, i) => `
+    <div class="mic-chip mic-${(i % 4) + 1}${m.holding ? " speaking" : ""}"
+         title="${m.holding ? "live — audio is reaching the model" : "connected"}">
+      <span class="swatch"></span>
+      <span class="mic-name">${String(m.label).replace(/[<>&]/g, "")}</span>
+      <span class="level"><i style="width:${Math.min(100, Math.round((m.rms || 0) * 900))}%"></i></span>
+      <span class="msym">${m.holding ? "graphic_eq" : "mic"}</span>
+    </div>`).join("");
+
+  const n = r.length;
+  dock.add.disabled = n >= MAX_MICS;
+  dock.add.querySelector("span:last-child").textContent =
+    micState.mac.active ? "Mac mic" : "Mac mic";
+  dock.add.classList.toggle("on", micState.mac.active);
+
+  const live = r.filter((m) => m.holding).length;
+  dock.plive.textContent = n
+    ? `${n} of ${MAX_MICS} connected${live ? " · one is live" : ""}`
+    : "No microphones yet";
+}
+
+/* --- Mac input picker: the backend's real devices, not the browser's ---- */
+function pickMacDevice() {
+  const devs = micState.devices;
+  const cur = micState.mac.device;
+  dock.list.innerHTML = (devs.length
+    ? devs.map((d) => `
+        <button class="picker-item" data-i="${d.index}">
+          <span class="msym">${d.index === cur && micState.mac.active
+            ? "check_circle" : "mic"}</span>
+          <span>${String(d.name).replace(/[<>&]/g, "")}${d.default ? " · default" : ""}</span>
         </button>`).join("")
     : `<div style="color:#5F6368;font-size:14px;padding:8px 4px">
-         No microphones found. Check permissions.</div>`;
+         No inputs reported by the backend.</div>`)
+    + (micState.mac.active
+        ? `<button class="picker-item" data-i="off">
+             <span class="msym">mic_off</span><span>Turn the Mac mic off</span></button>`
+        : "");
 
   dock.picker.classList.add("on");
   poke();
-
-  return new Promise((resolve) => {
-    const done = (v) => {
-      dock.picker.classList.remove("on");
-      dock.list.onclick = null; dock.cancel.onclick = null;
-      resolve(v);
-    };
-    dock.list.onclick = (e) => {
-      const b = e.target.closest(".picker-item");
-      if (b && !b.disabled) done(b.dataset.id);
-    };
-    dock.cancel.onclick = () => done(null);
-  });
+  dock.list.onclick = (e) => {
+    const b = e.target.closest(".picker-item");
+    if (!b) return;
+    window.sendPresenter(b.dataset.i === "off"
+      ? "mic_off" : `mic_device:${b.dataset.i}`);
+    close();
+  };
+  dock.cancel.onclick = close;
+  function close() {
+    dock.picker.classList.remove("on");
+    dock.list.onclick = dock.cancel.onclick = null;
+  }
 }
 
-/* --- add / remove / mute --------------------------------------------- */
-async function addMic() {
-  if (mics.size >= MAX_MICS) return;
-  const deviceId = await pickDevice();
-  if (!deviceId) return;
-
-  let stream;
-  try {
-    stream = await navigator.mediaDevices.getUserMedia({
-      audio: { deviceId: { exact: deviceId },
-               echoCancellation: true, noiseSuppression: true },
-    });
-  } catch (e) { return; }               // denied or busy: fail quietly
-
-  /* lowest free slot keeps colours stable as mics come and go */
-  let slot = 1;
-  while ([...mics.values()].some((m) => m.slot === slot)) slot++;
-
-  const el = document.createElement("button");
-  el.className = `mic-chip mic-${slot}`;
-  el.innerHTML = `
-    <span class="swatch"></span>
-    <span class="mic-name">Mic ${slot}</span>
-    <span class="level"><i></i></span>
-    <span class="msym">mic</span>`;
-
-  const m = { slot, deviceId, stream, el, muted: false,
-              track: stream.getAudioTracks()[0] };
-  mics.set(slot, m);
-  dock.row.appendChild(el);
-  meter(m);
-
-  el.onclick = () => toggleMute(slot);
-  el.oncontextmenu = (e) => { e.preventDefault(); removeMic(slot); };
-
-  dock.add.disabled = mics.size >= MAX_MICS;
-  window.sendPresenter(`mic_add:${slot}`);
+/* --- phone panel -------------------------------------------------------- */
+function togglePhone(on) {
+  dock.panel.classList.toggle("on", on);
+  if (on) window.sendPresenter("mics_refresh");
   poke();
-}
-
-function toggleMute(slot) {
-  const m = mics.get(slot);
-  if (!m) return;
-  m.muted = !m.muted;
-  if (m.track) m.track.enabled = !m.muted;
-  m.el.classList.toggle("muted", m.muted);
-  m.el.querySelector(".msym").textContent = m.muted ? "mic_off" : "mic";
-  if (m.muted) m.el.classList.remove("speaking");
-  window.sendPresenter(`${m.muted ? "mic_mute" : "mic_unmute"}:${slot}`);
-  poke();
-}
-
-function removeMic(slot) {
-  const m = mics.get(slot);
-  if (!m) return;
-  try { m.stream.getTracks().forEach((t) => t.stop()); } catch (e) { /* gone */ }
-  try { m.ctx && m.ctx.close(); } catch (e) { /* gone */ }
-  m.el.remove();
-  mics.delete(slot);
-  dock.add.disabled = mics.size >= MAX_MICS;
-  window.sendPresenter(`mic_remove:${slot}`);
-}
-
-/* live level meter: real audio, so a dead mic is visibly dead before you
-   find out on stage */
-function meter(m) {
-  let ctx;
-  try { ctx = new (window.AudioContext || window.webkitAudioContext)(); }
-  catch (e) { return; }
-  m.ctx = ctx;
-  const an = ctx.createAnalyser();
-  an.fftSize = 256;
-  ctx.createMediaStreamSource(m.stream).connect(an);
-  const buf = new Uint8Array(an.frequencyBinCount);
-  const bar = m.el.querySelector(".level i");
-
-  (function tick() {
-    if (!mics.has(m.slot)) return;
-    an.getByteFrequencyData(buf);
-    let sum = 0;
-    for (const v of buf) sum += v;
-    const lvl = m.muted ? 0 : Math.min(100, (sum / buf.length) * 2.6);
-    bar.style.width = `${lvl}%`;
-    m.el.classList.toggle("speaking", lvl > 14);
-    requestAnimationFrame(tick);
-  })();
 }
 
 /* --- camera ----------------------------------------------------------- */
@@ -187,8 +155,15 @@ async function toggleCam() {
   poke();
 }
 
-dock.add.onclick   = addMic;
+dock.add.onclick   = pickMacDevice;
+dock.phone.onclick = () => togglePhone(!dock.panel.classList.contains("on"));
+dock.pclose.onclick = () => togglePhone(false);
 dock.cam.onclick   = toggleCam;
+addEventListener("keydown", (e) => {
+  if (e.key === "Escape") togglePhone(false);
+  if (e.key.toLowerCase() === "m" && !e.metaKey && !e.ctrlKey) pickMacDevice();
+});
+window.CoDock = { onMics };
 dock.clear.onclick = () => { window.CoStage.clearAll(); window.sendPresenter("clear"); };
 
 

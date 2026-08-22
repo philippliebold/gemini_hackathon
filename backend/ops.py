@@ -88,6 +88,21 @@ def canvas_clear() -> dict:
     return _frame("canvas.clear", {})
 
 
+def mics_state(payload: dict) -> dict:
+    """CONTRACT ADDITION (announced): op "mics.state".
+
+    Lets the screen show the phone-join code and who is live, so the room can set
+    itself up without anyone reading a terminal. Purely informational — the frontend
+    renders it as chrome, never as a block.
+
+        {"join_url": "https://10.0.0.5:8766/", "qr_svg": "<svg .../>",
+         "roster": [{"id","label","holding","talking","rms"}],
+         "devices": [{"index","name","default"}],
+         "mac": {"active": bool, "device": int|None}}
+    """
+    return _frame("mics.state", payload)
+
+
 def status(state: str, transcript: str | None = None) -> dict:
     if state not in STATES:
         raise ValueError(f"unknown state {state!r}")

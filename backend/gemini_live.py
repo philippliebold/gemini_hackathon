@@ -28,6 +28,7 @@ import tools
 from config import CFG
 
 HEARTBEAT_S = 25.0        # top up canvas context if no tool has fired this long
+SILENCE_GUARD_S = 8.0     # refuse to draw if nothing has been transcribed this long
 TRIGGER_TOKENS = 16000    # compress the session before it hits the wall
 TARGET_TOKENS = 8000
 
@@ -136,6 +137,10 @@ async def run(audio_q: asyncio.Queue, broadcast: Callable[[dict], None],
     client = genai.Client(api_key=CFG.api_key)
     cfg = build_config(state.get("handle"))
     last_tool = time.time()
+    # Nothing has been heard yet. Any tool call before the first transcript is the
+    # model inventing, so start this in the past rather than at "now".
+    last_heard = 0.0
+    suppressed = 0
 
     async with client.aio.live.connect(model=CFG.live_model, config=cfg) as session:
         broadcast(ops.status("listening"))
@@ -190,6 +195,14 @@ async def run(audio_q: asyncio.Queue, broadcast: Callable[[dict], None],
             nonlocal last_tool
             last_tool = time.time()
 
+        def nonlocal_heard(t: float) -> None:
+            nonlocal last_heard
+            last_heard = t
+
+        def nonlocal_suppressed() -> None:
+            nonlocal suppressed
+            suppressed += 1
+
         async def pump_heartbeat():
             """Top up canvas context when the model has been quiet a while.
 
@@ -211,6 +224,7 @@ async def run(audio_q: asyncio.Queue, broadcast: Callable[[dict], None],
             async for response in session.receive():
                 sc = response.server_content
                 if sc and sc.input_transcription and sc.input_transcription.text:
+                    nonlocal_heard(time.time())
                     text = sc.input_transcription.text
                     broadcast(ops.status("listening", text))
                     if brain is not None:
@@ -230,6 +244,24 @@ async def run(audio_q: asyncio.Queue, broadcast: Callable[[dict], None],
 
                 if response.tool_call:
                     _mark_tool()
+                    # Structural "never invent": the model sometimes calls a tool
+                    # with nothing transcribed at all — an empty room produced
+                    # "Nice, Agreed 👍". A prompt cannot guarantee this; a guard
+                    # can. If we have not heard words recently, we do not draw.
+                    quiet_for = time.time() - last_heard
+                    if quiet_for > SILENCE_GUARD_S:
+                        nonlocal_suppressed()
+                        names = ", ".join(fc.name for fc
+                                          in response.tool_call.function_calls)
+                        print(f"[live] suppressed {names}: nothing heard for "
+                              f"{quiet_for:.0f}s (total {suppressed})")
+                        await session.send_tool_response(function_responses=[
+                            types.FunctionResponse(
+                                id=fc.id, name=fc.name,
+                                response={"error": "nobody is speaking; draw "
+                                                   "nothing and stay silent"})
+                            for fc in response.tool_call.function_calls])
+                        continue
                     broadcast(ops.status("drawing"))
                     replies = []
                     for fc in response.tool_call.function_calls:

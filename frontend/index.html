@@ -63,6 +63,9 @@
     <button id="add-mic" class="dock-btn" title="Add a microphone (up to 4)">
       <span class="msym">add</span><span>Mic</span>
     </button>
+    <button id="phone-btn" class="dock-btn" title="Join a phone as a microphone">
+      <span class="msym">qr_code_2</span><span>Phone</span>
+    </button>
     <button id="cam-btn" class="dock-btn" title="Toggle camera">
       <span class="msym">videocam_off</span><span>Camera</span>
     </button>
@@ -76,6 +79,21 @@
   </div>
 
   <div id="cam-wrap" class="cam-wrap"><video id="cam" autoplay muted playsinline></video></div>
+
+  <div id="phone" class="picker"><div class="picker-card phone-card">
+    <div class="picker-title">Join a phone as a microphone</div>
+    <div class="phone-body">
+      <div id="phone-qr" class="phone-qr"></div>
+      <div class="phone-side">
+        <div class="phone-step"><b>1</b> Same Wi-Fi as this Mac</div>
+        <div class="phone-step"><b>2</b> Scan, or open the link below</div>
+        <div class="phone-step"><b>3</b> Accept the certificate warning once</div>
+        <a id="phone-url" class="phone-url" target="_blank" rel="noreferrer"></a>
+        <div id="phone-live" class="phone-live"></div>
+      </div>
+    </div>
+    <button id="phone-close" class="picker-cancel">Done</button>
+  </div></div>
 
   <div id="picker" class="picker"><div class="picker-card">
     <div class="picker-title">Choose a microphone</div>

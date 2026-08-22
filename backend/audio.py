@@ -95,3 +95,90 @@ async def file_chunks(queue: asyncio.Queue, path: str, floor=None,
 
 if __name__ == "__main__":
     print(list_devices())
+
+
+def input_devices() -> list[dict]:
+    """Real input devices on this machine, for the screen's mic picker."""
+    out = []
+    try:
+        default = sd.default.device[0]
+    except Exception:                                    # noqa: BLE001
+        default = None
+    try:
+        for i, d in enumerate(sd.query_devices()):
+            if d.get("max_input_channels", 0) > 0:
+                out.append({"index": i, "name": d.get("name", f"Input {i}"),
+                            "default": i == default})
+    except Exception as e:                               # noqa: BLE001
+        print(f"[audio] could not list devices: {e}")
+    return out
+
+
+class MacMic:
+    """The Mac's own input, switchable while the talk is running.
+
+    The original code opened one device at startup and that was it. The dock needs
+    to change or drop it mid-setup, so the stream lives in a supervised task that
+    tears down and reopens on request. It joins the Floor only while active, so a
+    disabled Mac mic cannot hold the floor against the phones.
+    """
+
+    def __init__(self, queue: asyncio.Queue, floor=None, label: str = "Mac mic"):
+        self.queue, self.floor, self.label = queue, floor, label
+        self.device: int | None = None
+        self.active = False
+        self._change = asyncio.Event()
+
+    def select(self, device: int | None) -> None:
+        self.device = device
+        self.active = device is not None
+        self._change.set()
+
+    def off(self) -> None:
+        self.select(None)
+
+    async def run(self) -> None:
+        while True:
+            self._change.clear()
+            if not self.active:
+                await self._change.wait()
+                continue
+            # Name the chip after the real device: the dock shows this label, and
+            # "Mac mic" is a lie once you have picked the iPhone or an interface.
+            name = next((d["name"] for d in input_devices()
+                         if d["index"] == self.device), None)
+            label = name or self.label
+            mic = self.floor.join(label) if self.floor is not None else None
+            loop = asyncio.get_running_loop()
+            frames = int(CFG.sample_rate * CFG.chunk_ms / 1000)
+
+            def submit(pcm: bytes) -> None:
+                if self.floor is None:
+                    offer(self.queue, ("audio", pcm))
+                    return
+                forward, events = self.floor.accept(mic.id, pcm)
+                for ev in events:
+                    offer(self.queue, ev)
+                if forward:
+                    offer(self.queue, ("audio", pcm))
+
+            def cb(indata, _f, _t, status_):
+                if status_:
+                    print(f"[audio] {status_}", file=sys.stderr)
+                pcm = (indata[:, 0] * 32767).astype(np.int16).tobytes()
+                loop.call_soon_threadsafe(submit, pcm)
+
+            try:
+                with sd.InputStream(samplerate=CFG.sample_rate, channels=CFG.channels,
+                                    dtype="float32", blocksize=frames,
+                                    device=self.device, callback=cb):
+                    print(f"[audio] Mac mic open on device {self.device}")
+                    await self._change.wait()
+            except Exception as e:                       # noqa: BLE001
+                print(f"[audio] could not open device {self.device}: {e}")
+                self.active = False
+                await asyncio.sleep(0.5)
+            finally:
+                if mic is not None:
+                    self.floor.leave(mic.id)
+                print("[audio] Mac mic closed")

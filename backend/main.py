@@ -26,15 +26,35 @@ import tools
 from config import CFG
 
 
+def qr_svg(url: str) -> str | None:
+    """Render the join URL as an SVG on the backend, so the screen needs no QR
+    library and works with no network."""
+    try:
+        import io
+        import qrcode
+        import qrcode.image.svg
+        buf = io.BytesIO()
+        qrcode.make(url, image_factory=qrcode.image.svg.SvgPathImage,
+                    box_size=10, border=2).save(buf)
+        svg = buf.getvalue().decode()
+        svg = svg[svg.index("<svg"):]                    # drop the XML declaration
+        return svg.replace('width="', 'data-w="', 1).replace('height="', 'data-h="', 1)
+    except Exception as e:                               # noqa: BLE001
+        print(f"[mic] no QR ({e}); the URL still works")
+        return None
+
+
 async def roster_ticker(floor: mics.Floor) -> None:
-    """One line showing who is connected and who has the floor. Setup aid: it is
-    how you confirm all four phones are actually live before you start talking."""
+    """One line showing who is connected and who has the floor, and the same state
+    pushed to the screen so the room can see it without reading a terminal."""
     last = ""
     while True:
-        await asyncio.sleep(2)
+        await asyncio.sleep(1.5)
         line = floor.summary()
-        if floor.mics and line != last:
-            print(f"[mic] {line}")
+        if line != last:
+            if floor.mics:
+                print(f"[mic] {line}")
+            server.push_mics()
             last = line
 
 
@@ -67,6 +87,16 @@ async def main(args):
                 server.broadcast(ops.status("error"))
                 await asyncio.sleep(2)
 
+    # The screen drives the mics: it needs the join code, the roster, and this
+    # machine's real input devices.
+    macmic = audio.MacMic(q, floor)
+    server.CONTROL.update({
+        "floor": floor, "macmic": macmic, "max_mics": mics.MAX_MICS,
+        "devices": audio.input_devices,
+        "join_url": f"https://{mic_server.lan_ip()}:{CFG.mic_port}/",
+    })
+    server.CONTROL["qr_svg"] = qr_svg(server.CONTROL["join_url"])
+
     tasks = [server.serve(), ear(), mem.loop()]
     if brain is not None:
         await brain.select_model()      # know which brain before the talk starts
@@ -77,14 +107,23 @@ async def main(args):
         # boundaries the Live model needs in order to respond at all.
         tasks.append(audio.file_chunks(q, args.pcm, floor, "Recording"))
     elif not args.phones_only:
-        tasks.append(audio.mic_chunks(q, args.device, floor, "Mac mic"))
+        # Start on the requested device (or the default) but keep it switchable
+        # from the dock for the rest of the session.
+        macmic.select(args.device if args.device is not None
+                      else next((d["index"] for d in audio.input_devices()
+                                 if d["default"]), 0))
+        tasks.append(macmic.run())
+    else:
+        tasks.append(macmic.run())          # idle, but selectable from the screen
+
+    if not args.pcm:
+        tasks.append(roster_ticker(floor))
 
     if not args.no_phones and not args.pcm:
         tasks += [mic_server.serve_mics(
                       floor,
                       lambda pcm: audio.offer(q, ("audio", pcm)),
-                      lambda kind, value: audio.offer(q, (kind, value))),
-                  roster_ticker(floor)]
+                      lambda kind, value: audio.offer(q, (kind, value)))]
 
     await asyncio.gather(*tasks)
 

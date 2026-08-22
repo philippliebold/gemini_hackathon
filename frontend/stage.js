@@ -356,6 +356,8 @@ const OPS = {
   "link.add": () => {},               /* no edges in a scene model */
   "link.remove": () => {},
   "status": setStatus,
+  /* mic state is chrome, never a scene — the dock owns it */
+  "mics.state": (p) => window.CoDock && window.CoDock.onMics(p),
 };
 
 function handle(frame) {

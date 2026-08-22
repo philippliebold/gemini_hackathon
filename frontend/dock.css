@@ -157,3 +157,51 @@
 .src-toggle button.on .msym { color: #7FB0FF; font-variation-settings: "FILL" 1; }
 
 body.clean .src-toggle { opacity: 0; pointer-events: none; }
+
+/* ---------- phone join panel ----------
+ * Reuses .picker's scrim and card. Sized so the QR is scannable from a metre
+ * away — people hold a phone up, they do not lean into the screen. */
+.phone-card { min-width: 560px; max-width: 640px; }
+.phone-body { display: flex; gap: 26px; align-items: center; }
+
+.phone-qr {
+  flex: none; width: 208px; height: 208px; border-radius: 20px;
+  background: #fff; padding: 12px; display: grid; place-items: center;
+}
+/* the backend hands us a bare <svg> with mm dimensions; make it fill the tile */
+.phone-qr svg { width: 100%; height: 100%; display: block; }
+.phone-qr svg path { fill: #0B1220; }
+.phone-qr:empty::after {
+  content: "no QR — use the link"; color: #5F6368; font-size: 13px; text-align: center;
+}
+
+.phone-side { display: flex; flex-direction: column; gap: 9px; min-width: 0; }
+.phone-step {
+  display: flex; align-items: baseline; gap: 10px;
+  font-size: 14px; color: #C9DAF5; line-height: 1.35;
+}
+.phone-step b {
+  flex: none; width: 20px; height: 20px; border-radius: 50%;
+  background: rgba(66,133,244,.28); color: #BBD7FF;
+  font-size: 12px; font-weight: 600; display: grid; place-items: center;
+}
+.phone-url {
+  margin-top: 6px; font-family: "Roboto Mono", ui-monospace, monospace;
+  font-size: 13px; color: #7FB0FF; text-decoration: none;
+  word-break: break-all; line-height: 1.4;
+}
+.phone-url:hover { text-decoration: underline; }
+.phone-live {
+  margin-top: 4px; font-size: 13px; color: #9FB7D8;
+  padding-top: 10px; border-top: 1px solid rgba(255,255,255,.12);
+}
+
+/* the chips are backend state, not buttons — do not offer a pointer */
+.dock-row .mic-chip { cursor: default; }
+.dock-row .mic-chip .level i { transition: width .18s linear; }
+.mic-chip.speaking { background: rgba(66,133,244,.30); }
+
+@media (max-width: 720px) {
+  .phone-card { min-width: 0; width: calc(100vw - 40px); }
+  .phone-body { flex-direction: column; }
+}
