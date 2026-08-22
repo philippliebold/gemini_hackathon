@@ -26,6 +26,23 @@ import tools
 from config import CFG
 
 
+async def loop_watchdog(threshold_s: float = 0.25) -> None:
+    """Report when the event loop stalls.
+
+    A blocked loop and a bad network look identical from the outside: both end as
+    "keepalive ping timeout", because a late PONG and an unanswered PING are the
+    same symptom. This tells them apart — if there are no lag lines and the session
+    still drops, the network is the problem, not us.
+    """
+    import time as _t
+    while True:
+        t0 = _t.perf_counter()
+        await asyncio.sleep(0.5)
+        lag = _t.perf_counter() - t0 - 0.5
+        if lag > threshold_s:
+            print(f"[loop] stalled {lag*1000:.0f} ms — this can kill the Live session")
+
+
 def qr_svg(url: str) -> str | None:
     """Render the join URL as an SVG on the backend, so the screen needs no QR
     library and works with no network."""
@@ -78,14 +95,22 @@ async def main(args):
     session_state: dict = {}
 
     async def ear():
+        attempt = 0
         while True:
             try:
                 await gemini_live.run(q, server.broadcast, mem, session_state,
                                       brain)
+                attempt = 0                 # clean exit: reset the backoff
             except Exception as e:  # noqa: BLE001 - reconnect, never die on stage
-                print(f"[live] session died: {type(e).__name__}: {e}; retrying in 2s")
+                # Backoff, but start small: a keepalive drop mid-sentence used to
+                # cost a flat 2 s of dead stage, and the session resumes with its
+                # context intact so retrying fast is cheap.
+                delay = min(2.0, 0.3 * (2 ** attempt))
+                attempt = min(attempt + 1, 3)
+                print(f"[live] session died: {type(e).__name__}: "
+                      f"{str(e)[:80]}; retrying in {delay:.1f}s")
                 server.broadcast(ops.status("error"))
-                await asyncio.sleep(2)
+                await asyncio.sleep(delay)
 
     # The screen drives the mics: it needs the join code, the roster, and this
     # machine's real input devices.
@@ -97,7 +122,7 @@ async def main(args):
     })
     server.CONTROL["qr_svg"] = qr_svg(server.CONTROL["join_url"])
 
-    tasks = [server.serve(), ear(), mem.loop()]
+    tasks = [server.serve(), ear(), mem.loop(), loop_watchdog()]
     if brain is not None:
         await brain.select_model()      # know which brain before the talk starts
         tasks.append(brain.loop())

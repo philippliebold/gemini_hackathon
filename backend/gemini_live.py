@@ -29,6 +29,7 @@ from config import CFG
 
 HEARTBEAT_S = 25.0        # top up canvas context if no tool has fired this long
 SILENCE_GUARD_S = 8.0     # refuse to draw if nothing has been transcribed this long
+KEEPALIVE_GAP_S = 1.2     # if no real audio for this long, send silence instead
 TRIGGER_TOKENS = 16000    # compress the session before it hits the wall
 TARGET_TOKENS = 8000
 
@@ -141,6 +142,9 @@ async def run(audio_q: asyncio.Queue, broadcast: Callable[[dict], None],
     # model inventing, so start this in the past rather than at "now".
     last_heard = 0.0
     suppressed = 0
+    last_audio = time.time()
+    # 20 ms of true digital silence at 16 kHz, mono, 16-bit.
+    SILENT_FRAME = b"\x00" * (2 * CFG.sample_rate * CFG.chunk_ms // 1000)
 
     async with client.aio.live.connect(model=CFG.live_model, config=cfg) as session:
         broadcast(ops.status("listening"))
@@ -167,6 +171,7 @@ async def run(audio_q: asyncio.Queue, broadcast: Callable[[dict], None],
             while True:
                 kind, payload = await audio_q.get()
                 if kind == "audio":
+                    mark_audio()
                     await session.send_realtime_input(
                         audio=types.Blob(data=payload,
                                          mime_type="audio/pcm;rate=16000")
@@ -194,6 +199,32 @@ async def run(audio_q: asyncio.Queue, broadcast: Callable[[dict], None],
         def _mark_tool():
             nonlocal last_tool
             last_tool = time.time()
+
+        def mark_audio() -> None:
+            nonlocal last_audio
+            last_audio = time.time()
+
+        async def pump_silence():
+            """Keep the audio stream continuous while nobody is speaking.
+
+            The floor stops forwarding frames the moment a speaker pauses — that is
+            what stops room noise reaching the model. But it also leaves the socket
+            idle, and Gemini kills an idle Live session on a keepalive timeout: the
+            board would work while you talked, then die when you stopped. Observed
+            twice as "session died: keepalive ping timeout".
+
+            Sending real silence keeps the stream alive without feeding the model
+            anything to hallucinate from — zeros transcribe as nothing, whereas the
+            room noise we are gating out does not.
+            """
+            while True:
+                await asyncio.sleep(0.4)
+                if time.time() - last_audio < KEEPALIVE_GAP_S:
+                    continue
+                mark_audio()
+                await session.send_realtime_input(
+                    audio=types.Blob(data=SILENT_FRAME,
+                                     mime_type="audio/pcm;rate=16000"))
 
         def nonlocal_heard(t: float) -> None:
             nonlocal last_heard
@@ -277,4 +308,5 @@ async def run(audio_q: asyncio.Queue, broadcast: Callable[[dict], None],
                         await session.send_tool_response(function_responses=replies)
                     broadcast(ops.status("listening"))
 
-        await asyncio.gather(pump_audio(), pump_responses(), pump_heartbeat())
+        await asyncio.gather(pump_audio(), pump_responses(), pump_heartbeat(),
+                             pump_silence())
