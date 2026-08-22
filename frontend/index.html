@@ -55,6 +55,40 @@
     <span id="transcript" class="text-[#80868B] max-w-[46ch] truncate"></span>
   </div>
 
+  <!-- ── Control dock ──────────────────────────────────────────────────
+       Presenters face the room, so this hides itself after 3s of no mouse
+       movement and returns on the first twitch. Visible when you need it,
+       invisible in the photo the audience is looking at. -->
+  <div id="dock" class="dock">
+    <div class="dock-row" id="mic-row"><!-- mic chips injected here --></div>
+
+    <div class="dock-sep"></div>
+
+    <button id="add-mic" class="dock-btn" title="Add a microphone (up to 4)">
+      <span class="msym">add</span><span class="dock-label">Mic</span>
+    </button>
+
+    <button id="cam-btn" class="dock-btn" title="Toggle camera">
+      <span class="msym">videocam_off</span><span class="dock-label">Camera</span>
+    </button>
+
+    <div class="dock-sep"></div>
+
+    <button id="clear-btn" class="dock-btn" title="Clear the canvas">
+      <span class="msym">ink_eraser</span>
+    </button>
+  </div>
+
+  <!-- camera preview: proof to the room that the lens is live -->
+  <div id="cam-wrap" class="cam-wrap"><video id="cam" autoplay muted playsinline></video></div>
+
+  <!-- device picker -->
+  <div id="picker" class="picker"><div class="picker-card">
+    <div class="picker-title">Choose a microphone</div>
+    <div id="picker-list"></div>
+    <button id="picker-cancel" class="picker-cancel">Cancel</button>
+  </div></div>
+
   <div class="absolute bottom-6 right-6 text-[10px] text-[#BDC1C6]">
     scroll zoom · drag pan · F fit · C clear
   </div>

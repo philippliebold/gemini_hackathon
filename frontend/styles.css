@@ -191,3 +191,149 @@ html, body {
   transition: font-variation-settings .45s var(--ease);
 }
 .block.is-focus .msym { font-variation-settings: "FILL" 1, "wght" 500, "GRAD" 0, "opsz" 24; }
+
+/* ── Control dock ───────────────────────────────────────────────────────
+   Material 3 surface container: a floating pill, elevation-3, fully
+   rounded. Auto-hides so the audience sees the canvas, not the controls. */
+
+.dock {
+  position: fixed; bottom: 26px; left: 50%;
+  transform: translateX(-50%) translateY(0);
+  display: flex; align-items: center; gap: 6px;
+  padding: 10px 14px;
+  background: var(--surface);
+  border: 1px solid var(--outline);
+  border-radius: 999px;
+  box-shadow: var(--elev-3);
+  z-index: 50;
+  transition: opacity .45s var(--ease), transform .45s var(--ease);
+}
+.dock.hidden { opacity: 0; transform: translateX(-50%) translateY(26px); pointer-events: none; }
+
+.dock-row { display: flex; align-items: center; gap: 6px; }
+.dock-row:empty { display: none; }
+
+.dock-sep { width: 1px; height: 26px; background: var(--outline); margin: 0 4px; }
+.dock-row:empty + .dock-sep { display: none; }
+
+/* M3 tonal button */
+.dock-btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  white-space: nowrap; flex: none;
+  height: 44px; padding: 0 18px;
+  border: none; border-radius: 999px; cursor: pointer;
+  background: var(--surface-sink); color: var(--on-surface);
+  font-family: var(--font-body); font-size: 14px; font-weight: 500;
+  transition: background .2s ease, box-shadow .2s ease, transform .12s ease;
+}
+.dock-btn:hover  { background: #E8EAED; }
+.dock-btn:active { transform: scale(.96); }
+.dock-btn .msym  { font-size: 20px; color: var(--on-muted); }
+.dock-btn:disabled { opacity: .38; cursor: not-allowed; }
+
+/* camera live = Google Blue filled */
+.dock-btn.on { background: #E8F0FE; color: var(--g-blue); }
+.dock-btn.on .msym { color: var(--g-blue); font-variation-settings: "FILL" 1; }
+
+/* ── Mic chips: one per connected mic, in the four brand colours ───────── */
+
+.mic-chip {
+  display: inline-flex; align-items: center; gap: 8px;
+  height: 44px; padding: 0 8px 0 14px;
+  border-radius: 999px; cursor: pointer; border: none;
+  background: var(--surface-sink);
+  font-family: var(--font-body); font-size: 14px; font-weight: 500;
+  color: var(--on-surface);
+  white-space: nowrap; flex: none;
+  transition: background .2s ease, opacity .2s ease;
+}
+.mic-chip:hover { background: #E8EAED; }
+
+/* the speaker's colour, carried straight through from the canvas rails */
+.mic-chip .swatch {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: var(--mic-color, var(--on-faint));
+  flex: none;
+  box-shadow: 0 0 0 0 var(--mic-color);
+}
+/* live input pulses the swatch — the room can see which mic is hearing */
+.mic-chip.speaking .swatch { animation: mic-pulse 1.1s var(--ease) infinite; }
+@keyframes mic-pulse {
+  0%   { box-shadow: 0 0 0 0 var(--mic-color); opacity: 1 }
+  70%  { box-shadow: 0 0 0 7px transparent;    opacity: .85 }
+  100% { box-shadow: 0 0 0 0 transparent;      opacity: 1 }
+}
+
+.mic-chip .msym { font-size: 19px; color: var(--on-muted); }
+
+/* muted: desaturated, struck through, no pulse */
+.mic-chip.muted { background: transparent; color: var(--on-faint); }
+.mic-chip.muted .swatch { background: var(--outline); animation: none; box-shadow: none; }
+.mic-chip.muted .msym { color: var(--g-red); }
+
+/* live level meter — thin bar under the label */
+.mic-chip .level {
+  width: 26px; height: 3px; border-radius: 2px;
+  background: var(--outline); overflow: hidden;
+}
+.mic-chip .level i {
+  display: block; height: 100%; width: 0%;
+  background: var(--mic-color); transition: width .08s linear;
+}
+.mic-chip.muted .level { opacity: .3 }
+
+.mic-1 { --mic-color: var(--g-blue);   }
+.mic-2 { --mic-color: var(--g-red);    }
+.mic-3 { --mic-color: var(--g-yellow); }
+.mic-4 { --mic-color: var(--g-green);  }
+
+/* ── Camera preview ─────────────────────────────────────────────────── */
+
+.cam-wrap {
+  position: fixed; bottom: 92px; right: 26px;
+  width: 208px; border-radius: 20px; overflow: hidden;
+  border: 1px solid var(--outline); box-shadow: var(--elev-2);
+  background: #000; z-index: 40;
+  opacity: 0; transform: translateY(12px) scale(.96);
+  pointer-events: none;
+  transition: opacity .4s var(--ease), transform .4s var(--ease);
+}
+.cam-wrap.on { opacity: 1; transform: none; }
+.cam-wrap video { display: block; width: 100%; height: auto; }
+
+/* ── Device picker ──────────────────────────────────────────────────── */
+
+.picker {
+  position: fixed; inset: 0; z-index: 60;
+  display: none; place-items: center;
+  background: rgba(32,33,36,.32);
+}
+.picker.on { display: grid; }
+.picker-card {
+  background: var(--surface); border-radius: 28px;
+  box-shadow: var(--elev-3); padding: 26px 24px;
+  min-width: 340px; max-width: 460px;
+  font-family: var(--font-body);
+  animation: pop .3s var(--ease) both;
+}
+.picker-title {
+  font-family: var(--font-display); font-size: 20px;
+  color: var(--on-surface); margin-bottom: 14px;
+}
+.picker-item {
+  display: flex; align-items: center; gap: 12px;
+  width: 100%; text-align: left; border: none; cursor: pointer;
+  background: transparent; border-radius: 14px;
+  padding: 13px 14px; font-size: 15px; color: var(--on-surface);
+  font-family: var(--font-body);
+}
+.picker-item:hover { background: var(--surface-sink); }
+.picker-item .msym { color: var(--on-muted); font-size: 20px; }
+.picker-item[disabled] { opacity: .4; cursor: not-allowed; }
+.picker-cancel {
+  margin-top: 12px; width: 100%; border: none; cursor: pointer;
+  background: transparent; color: var(--g-blue);
+  font-family: var(--font-body); font-size: 14px; font-weight: 500;
+  padding: 11px; border-radius: 999px;
+}
+.picker-cancel:hover { background: #E8F0FE; }
