@@ -77,11 +77,13 @@ const SCENE = {
        </div>`
     : `<div class="loading"></div>`,
 
+  /* The fixture ships a YOUR_MAPS_KEY placeholder so no key lands in the
+     repo. Pass a real one for a local demo: ?mapskey=... */
   map: (d) => `
     <div class="t-kicker">${esc(d.from || "")} → ${esc(d.to || "")}</div>
     <div class="shot">
       ${d.embed_url
-        ? `<iframe src="${esc(d.embed_url)}" style="height:min(48vh,520px)"
+        ? `<iframe src="${esc(String(d.embed_url).replace("YOUR_MAPS_KEY", Q.get("mapskey") || "YOUR_MAPS_KEY"))}" style="height:min(48vh,520px)"
              loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>`
         : `<div class="loading" style="aspect-ratio:16/11"></div>`}
     </div>
