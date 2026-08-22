@@ -427,6 +427,10 @@ function setMode(next) {
   mode = next;
   clearAll();
   stopDemo();
+  /* The caption belongs to the source that produced it. Leaving a demo
+     transcript on screen after switching to Live is a straight lie about
+     what the model just heard. */
+  setStatus({ state: mode === "demo" ? "idle" : "listening", transcript: "" });
   if (mode === "demo") { closeWs(); runDemo(); }
   else connect();
   document.querySelectorAll("#src-toggle button").forEach((b) =>

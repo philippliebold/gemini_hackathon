@@ -103,11 +103,15 @@ function renderGate(gate) {
    model right now — the single most useful thing to see before you speak. */
 function renderRoster() {
   const r = micState.roster;
+  /* Numbered, not named. "MacBook Pro Microphone" is long, changes per
+     machine, and tells the room nothing; the colour and the number are what
+     tie a chip to the speaker on the canvas. Real device name is the tooltip. */
   dock.row.innerHTML = r.map((m, i) => `
     <div class="mic-chip mic-${(i % 4) + 1}${m.holding ? " speaking" : ""}"
-         title="${m.holding ? "live — audio is reaching the model" : "connected"}">
+         title="${String(m.label).replace(/[<>&"]/g, "")}${
+           m.holding ? " — live, audio is reaching the model" : " — connected"}">
       <span class="swatch"></span>
-      <span class="mic-name">${String(m.label).replace(/[<>&]/g, "")}</span>
+      <span class="mic-name">Microphone ${i + 1}</span>
       <span class="level"><i style="width:${Math.min(100, Math.round((m.rms || 0) * 900))}%"></i></span>
       <span class="msym">${m.holding ? "graphic_eq" : "mic"}</span>
     </div>`).join("");
@@ -115,7 +119,7 @@ function renderRoster() {
   const n = r.length;
   dock.add.disabled = n >= MAX_MICS;
   dock.add.querySelector("span:last-child").textContent =
-    micState.mac.active ? "Mac mic" : "Mac mic";
+    micState.mac.active ? "Mac mic on" : "Mac mic";
   dock.add.classList.toggle("on", micState.mac.active);
 
   const live = r.filter((m) => m.holding).length;
