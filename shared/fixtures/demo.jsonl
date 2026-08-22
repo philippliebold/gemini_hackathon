@@ -1,27 +1,37 @@
 {"delay": 0.0, "op": "canvas.clear", "payload": {}}
-{"delay": 0.6, "op": "status", "payload": {"state": "listening", "transcript": ""}}
-{"delay": 2.0, "op": "status", "payload": {"state": "thinking", "transcript": "nobody actually wants to build slides for a ten minute talk"}}
-{"delay": 0.8, "op": "block.add", "payload": {"id": "a", "type": "hero", "x": 0, "y": 0, "w": 0, "h": 0, "enter": "fade", "data": {"emoji": "\ud83d\uddd3\ufe0f", "title": "No more slides", "sub": "Just talk. The screen keeps up.", "accent": "blue"}}}
-{"delay": 6.0, "op": "status", "payload": {"state": "thinking", "transcript": "the screen should just build itself while you speak"}}
-{"delay": 0.9, "op": "block.add", "payload": {"id": "b", "type": "term", "x": 0, "y": 0, "w": 0, "h": 0, "enter": "fade", "data": {"term": "Live canvas", "sub": "Speech in. Pictures out. Nothing prepared.", "accent": "blue"}}}
-{"delay": 5.5, "op": "status", "payload": {"state": "thinking", "transcript": "sentence to pixels in about one point four seconds"}}
-{"delay": 0.8, "op": "block.add", "payload": {"id": "c", "type": "stat", "x": 0, "y": 0, "w": 0, "h": 0, "enter": "fade", "data": {"value": "1.4s", "label": "sentence to pixels", "delta": "target under 2s", "accent": "green"}}}
-{"delay": 5.0, "op": "status", "payload": {"state": "thinking", "transcript": "and here is where that time actually goes"}}
-{"delay": 0.9, "op": "block.add", "payload": {"id": "d", "type": "chart", "x": 0, "y": 0, "w": 0, "h": 0, "enter": "fade", "data": {"title": "Latency budget \u00b7 milliseconds", "kind": "bar", "unit": "ms", "accent": "blue", "series": [{"label": "capture", "value": 40}, {"label": "model", "value": 900}, {"label": "websocket", "value": 30}, {"label": "render", "value": 150}]}}}
-{"delay": 7.0, "op": "status", "payload": {"state": "thinking", "transcript": "growth has been steady since we started"}}
-{"delay": 0.9, "op": "block.add", "payload": {"id": "e", "type": "chart", "x": 0, "y": 0, "w": 0, "h": 0, "enter": "fade", "data": {"title": "Sessions per week", "kind": "line", "accent": "green", "series": [{"label": "W1", "value": 120}, {"label": "W2", "value": 200}, {"label": "W3", "value": 185}, {"label": "W4", "value": 390}, {"label": "W5", "value": 520}, {"label": "W6", "value": 760}]}}}
-{"delay": 7.0, "op": "status", "payload": {"state": "thinking", "transcript": "i imagine it looking like a porsche nine eleven"}}
-{"delay": 0.8, "op": "block.add", "payload": {"id": "f", "type": "image", "x": 0, "y": 0, "w": 0, "h": 0, "enter": "fade", "data": {"src": null, "caption": "searching\u2026", "alt": "Porsche 911", "accent": "yellow"}}}
-{"delay": 2.6, "op": "block.update", "payload": {"id": "f", "data": {"src": "./assets/porsche-911.jpg", "caption": "Porsche 911 \u00b7 CC BY-SA \u00b7 Wikimedia Commons"}}}
-{"delay": 6.5, "op": "status", "payload": {"state": "thinking", "transcript": "picture the golden gate bridge at sunset, fog rolling in"}}
-{"delay": 0.8, "op": "block.add", "payload": {"id": "g", "type": "image", "x": 0, "y": 0, "w": 0, "h": 0, "enter": "fade", "data": {"src": null, "caption": "imagining\u2026", "alt": "Golden Gate", "accent": "yellow"}}}
-{"delay": 2.8, "op": "block.update", "payload": {"id": "g", "data": {"src": "./assets/golden-gate.jpg", "caption": "Generated \u00b7 Golden Gate at golden hour"}}}
-{"delay": 6.0, "op": "status", "payload": {"state": "thinking", "transcript": "the main cable follows a parabola, y equals w x squared over two H"}}
-{"delay": 0.9, "op": "block.add", "payload": {"id": "h", "type": "math", "x": 0, "y": 0, "w": 0, "h": 0, "enter": "fade", "data": {"title": "Cable curve", "tex": "y = \\frac{wx^2}{2H}", "note": "under uniform load", "accent": "red"}}}
-{"delay": 5.5, "op": "status", "payload": {"state": "thinking", "transcript": "i'm at one-north, how do i get to fusionopolis"}}
-{"delay": 0.9, "op": "block.add", "payload": {"id": "i", "type": "map", "x": 0, "y": 0, "w": 0, "h": 0, "enter": "fade", "data": {"from": "one-north", "to": "Fusionopolis", "mode": "walking", "duration": "6 min", "distance": "450 m", "accent": "green", "embed_url": "https://www.google.com/maps/embed/v1/directions?key=YOUR_MAPS_KEY&origin=one-north+MRT+Singapore&destination=Fusionopolis+Singapore&mode=walking"}}}
-{"delay": 7.0, "op": "status", "payload": {"state": "thinking", "transcript": "okay so to sum up what we covered today"}}
-{"delay": 1.1, "op": "block.add", "payload": {"id": "z", "type": "summary", "x": 0, "y": 0, "w": 0, "h": 0, "enter": "fade", "data": {"title": "In summary", "accent": "blue", "items": [{"emoji": "\ud83d\uddd3\ufe0f", "label": "No slides to build"}, {"value": "1.4s", "label": "Speech to pixels"}, {"value": "900ms", "label": "Model is the budget"}, {"emoji": "\ud83d\udcc8", "value": "760", "label": "Sessions per week"}, {"emoji": "\ud83d\uddbc\ufe0f", "label": "Real photos, searched live"}, {"emoji": "\ud83c\udf09", "label": "Or generated on demand"}, {"emoji": "\ud83e\uddee", "label": "Formulas typeset properly"}, {"emoji": "\ud83d\uddfa\ufe0f", "label": "Routes, live from Maps"}]}}}
-{"delay": 12.0, "op": "status", "payload": {"state": "listening", "transcript": ""}}
-{"delay": 2.0, "op": "block.remove", "payload": {"id": "z"}}
-{"delay": 1.5, "op": "status", "payload": {"state": "idle", "transcript": ""}}
+{"delay": 0.0, "op": "status", "payload": {"state": "listening"}}
+{"delay": 0.64, "op": "status", "payload": {"state": "thinking", "transcript": "so nobody actually wants to build slides for a ten minute talk"}}
+{"delay": 0.55, "op": "block.add", "payload": {"id": "b_1", "type": "hero", "x": -220, "y": -180, "w": 380, "h": 200, "enter": "pop", "data": {"title": "Nobody Wants Slides", "emoji": "🚫", "big": true}}}
+{"delay": 0.0, "op": "canvas.focus", "payload": {"ids": [], "padding": 80}}
+{"delay": 2.16, "op": "status", "payload": {"state": "thinking", "transcript": "the screen should just build itself while you speak"}}
+{"delay": 0.69, "op": "block.add", "payload": {"id": "b_2", "type": "hero", "x": 980, "y": -180, "w": 380, "h": 200, "enter": "pop", "data": {"title": "Automatic Visuals", "emoji": "💡", "sub": "Slides build themselves", "big": false}}}
+{"delay": 0.0, "op": "canvas.focus", "payload": {"ids": [], "padding": 80}}
+{"delay": 2.91, "op": "status", "payload": {"state": "thinking", "transcript": "we get from a spoken sentence to pixels in about one point four seconds"}}
+{"delay": 0.56, "op": "block.add", "payload": {"id": "b_3", "type": "stat", "x": -1420, "y": -180, "w": 320, "h": 200, "enter": "pop", "data": {"value": "1.4s", "label": "speech to pixels"}}}
+{"delay": 0.0, "op": "canvas.focus", "payload": {"ids": [], "padding": 80}}
+{"delay": 1.93, "op": "status", "payload": {"state": "thinking", "transcript": "capture is forty milliseconds, the model is nine hundred, the websocket thirty, and rendering another one hundred and fifty"}}
+{"delay": 0.72, "op": "block.add", "payload": {"id": "b_4", "type": "chart", "x": -1040, "y": -180, "w": 460, "h": 300, "enter": "fade", "data": {"title": "Latency Breakdown (ms)", "kind": "pie", "series": [{"label": "capture", "value": 40}, {"label": "model", "value": 900}, {"label": "socket", "value": 30}, {"label": "render", "value": 150}]}}}
+{"delay": 0.0, "op": "link.add", "payload": {"id": "l_1", "from": "b_3", "to": "b_4", "label": "in detail", "style": "arrow"}}
+{"delay": 0.0, "op": "canvas.focus", "payload": {"ids": ["b_3", "b_4"], "padding": 100}}
+{"delay": 1.87, "op": "status", "payload": {"state": "thinking", "transcript": "sessions per week went one twenty, two hundred, one eighty five, three ninety, five twenty, and seven sixty"}}
+{"delay": 0.82, "op": "block.add", "payload": {"id": "b_5", "type": "chart", "x": 2180, "y": -180, "w": 460, "h": 300, "enter": "fade", "data": {"title": "Weekly Usage Growth", "kind": "line", "series": [{"label": "W1", "value": 120}, {"label": "W2", "value": 200}, {"label": "W3", "value": 185}, {"value": 390, "label": "W4"}, {"value": 520, "label": "W5"}, {"label": "W6", "value": 760}]}}}
+{"delay": 0.0, "op": "canvas.focus", "payload": {"ids": [], "padding": 80}}
+{"delay": 1.88, "op": "status", "payload": {"state": "thinking", "transcript": "for the interface I imagine something as clean as a Porsche 911"}}
+{"delay": 0.49, "op": "block.add", "payload": {"id": "b_6", "type": "image", "x": -2620, "y": -180, "w": 520, "h": 380, "enter": "fade", "data": {"caption": "searching…", "alt": "Porsche 911"}}}
+{"delay": 0.0, "op": "canvas.focus", "payload": {"ids": [], "padding": 80}}
+{"delay": 0.8, "op": "block.update", "payload": {"id": "b_6", "data": {"src": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c6/2013_Porsche_911_Carrera_4S_%28991%29_%289626546987%29.jpg/1920px-2013_Porsche_911_Carrera_4S_%28991%29_%289626546987%29.jpg", "caption": "David Villarreal Fernández · CC BY-SA 2.0 · Wikimedia Commons"}}}
+{"delay": 1.05, "op": "status", "payload": {"state": "thinking", "transcript": "now picture the golden gate bridge at sunset with fog rolling in"}}
+{"delay": 1.36, "op": "block.add", "payload": {"id": "b_7", "type": "image", "x": 3380, "y": -180, "w": 420, "h": 320, "enter": "fade", "data": {"caption": "Golden Gate Bridge at sunset with fog", "alt": "golden gate bridge, sunset, fog rolling in"}}}
+{"delay": 0.0, "op": "canvas.focus", "payload": {"ids": [], "padding": 80}}
+{"delay": 1.88, "op": "status", "payload": {"state": "thinking", "transcript": "the main cable follows a parabola, y equals w x squared over two H"}}
+{"delay": 0.54, "op": "block.add", "payload": {"id": "b_8", "type": "math", "x": -3820, "y": -180, "w": 420, "h": 180, "enter": "fade", "data": {"tex": "y = \\frac{wx^2}{2H}", "title": "Main Cable Equation"}}}
+{"delay": 0.0, "op": "canvas.focus", "payload": {"ids": [], "padding": 80}}
+{"delay": 1.84, "op": "status", "payload": {"state": "thinking", "transcript": "I'm at one-north right now, how do I walk to Fusionopolis"}}
+{"delay": 0.94, "op": "block.add", "payload": {"id": "b_9", "type": "map", "x": 4580, "y": -180, "w": 420, "h": 320, "enter": "pop", "data": {"from": "one-north", "to": "Fusionopolis", "mode": "walking", "embed_url": "https://www.google.com/maps/embed/v1/directions?key=YOUR_MAPS_KEY&origin=one-north%2C+Singapore&destination=Fusionopolis%2C+Singapore&mode=walking&region=sg", "duration": "4 min", "distance": "290 m", "polyline": [[1.29886, 103.78694], [1.29879, 103.78714], [1.29865, 103.78723], [1.29861, 103.78732], [1.29863, 103.7875], [1.29844, 103.78795], [1.29845, 103.78805], [1.29836, 103.78808], [1.29835, 103.78801], [1.29832, 103.7881], [1.29834, 103.78811], [1.29829, 103.78822], [1.29827, 103.78821], [1.29822, 103.78833], [1.29827, 103.78829], [1.29829, 103.78834], [1.29808, 103.7888], [1.29788, 103.78926]]}}}
+{"delay": 0.0, "op": "canvas.focus", "payload": {"ids": [], "padding": 80}}
+{"delay": 1.56, "op": "block.update", "payload": {"id": "b_9", "data": {"duration": "4 min", "distance": "290 m", "polyline": [[1.29886, 103.78694], [1.29879, 103.78714], [1.29865, 103.78723], [1.29861, 103.78732], [1.29863, 103.7875], [1.29844, 103.78795], [1.29845, 103.78805], [1.29836, 103.78808], [1.29835, 103.78801], [1.29832, 103.7881], [1.29834, 103.78811], [1.29829, 103.78822], [1.29827, 103.78821], [1.29822, 103.78833], [1.29827, 103.78829], [1.29829, 103.78834], [1.29808, 103.7888], [1.29788, 103.78926]]}}}
+{"delay": 0.32, "op": "status", "payload": {"state": "thinking", "transcript": "okay so to sum up everything we covered today"}}
+{"delay": 0.74, "op": "block.add", "payload": {"id": "b_10", "type": "summary", "x": -5020, "y": -180, "w": 1200, "h": 620, "enter": "fade", "data": {"title": "Presentation Summary", "items": [{"emoji": "🚫", "value": null, "label": "No manual slides"}, {"emoji": "⚡", "value": null, "label": "Automatic screen build"}, {"emoji": "⏱️", "value": null, "label": "1.4s total latency"}, {"emoji": "📈", "value": null, "label": "Weekly usage grew"}]}}}
+{"delay": 0.0, "op": "canvas.focus", "payload": {"ids": [], "padding": 80}}
+{"delay": 2.88, "op": "block.update", "payload": {"id": "b_7", "data": {"src": "./assets/generated-0.jpg"}}}
+{"delay": 13.0, "op": "status", "payload": {"state": "listening"}}

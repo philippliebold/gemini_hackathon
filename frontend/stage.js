@@ -214,7 +214,14 @@ function addScene(p) {
 
 function updateScene(p) {
   const s = live.get(p.id);
-  if (!s) return addScene(p);
+  /* A slow tool (image generation runs ~12s) can land long after its scene
+     left the stage. Re-adding it here would resurrect a scene the talk has
+     moved past AND evict whatever is on screen -- and with no `type` on an
+     update payload it would render empty. The moment has passed: drop it. */
+  if (!s) {
+    if (!p.type) return;
+    return addScene(p);
+  }
   clearTimeout(s.timer);
   s.timer = setTimeout(() => retire(p.id), LIFETIME);
   if (p.data) {

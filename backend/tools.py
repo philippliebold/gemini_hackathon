@@ -83,6 +83,18 @@ def _human(seconds: int, metres: int) -> tuple[str, str]:
     return dur, dist
 
 
+def _localise(place: str | None) -> str:
+    """Bare local shorthand does not geocode. "one-north" alone matched a point
+    6,135 km away; biasing by region alone then found no route at all. Appending
+    the locality is what actually resolves it."""
+    place = (place or "").strip()
+    if not place or not CFG.maps_near:
+        return place
+    if CFG.maps_near.lower() in place.lower() or "," in place:
+        return place
+    return f"{place}, {CFG.maps_near}"
+
+
 async def _fill_route(block_id: str, origin: str, destination: str,
                       mode: str) -> None:
     """Fetch the real duration/distance/polyline and update the block in place.
@@ -105,9 +117,11 @@ async def _fill_route(block_id: str, origin: str, destination: str,
                          "X-Goog-FieldMask": "routes.duration,"
                                              "routes.distanceMeters,"
                                              "routes.polyline.encodedPolyline"},
-                json={"origin": {"address": origin},
-                      "destination": {"address": destination},
-                      "travelMode": _TRAVEL_MODE.get(mode, "WALK")})
+                json={"origin": {"address": _localise(origin)},
+                      "destination": {"address": _localise(destination)},
+                      "travelMode": _TRAVEL_MODE.get(mode, "WALK"),
+                      # without this, "one-north" geocodes to another continent
+                      "regionCode": CFG.maps_region})
         body = r.json()
         routes = body.get("routes") or []
         if not routes:
@@ -425,8 +439,9 @@ def tool_show_route(key: str, origin: str | None = None,
         # arrive a moment later via _fill_route so nothing waits on the network.
         data["embed_url"] = (
             "https://www.google.com/maps/embed/v1/directions"
-            f"?key={CFG.maps_key}&origin={quote_plus(origin or '')}"
-            f"&destination={quote_plus(destination or '')}&mode={mode}"
+            f"?key={CFG.maps_key}&origin={quote_plus(_localise(origin))}"
+            f"&destination={quote_plus(_localise(destination))}&mode={mode}"
+            f"&region={CFG.maps_region.lower()}"
         )
         # The iframe draws the real route straight away. These are placeholders for
         # the overlay chip until _fill_route lands, and they stay this way if the

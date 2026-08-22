@@ -23,6 +23,13 @@ class Config:
     model_fallback2: str = os.getenv("GEMINI_MODEL_FALLBACK2", "gemini-3.5-flash")
     image_model: str = os.getenv("GEMINI_IMAGE_MODEL", "gemini-2.5-flash-image")
     maps_key: str = os.getenv("GOOGLE_MAPS_API_KEY", "")
+    # Bias geocoding to the venue's country. Without it a bare place name like
+    # "one-north" matches somewhere on the other side of the planet: the first
+    # generated demo routed it 6,135 km.
+    maps_region: str = os.getenv("MAPS_REGION", "SG")
+    # Speakers say "one-north", not "one-north, Singapore". Appended to any
+    # address that does not already name a place, so local shorthand resolves.
+    maps_near: str = os.getenv("MAPS_NEAR", "Singapore")
     ws_host: str = os.getenv("WS_HOST", "127.0.0.1")
     ws_port: int = int(os.getenv("WS_PORT", "8765"))
 
