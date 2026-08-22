@@ -72,7 +72,8 @@ const SCENE = {
 
   image: (d) => d.src
     ? `<div class="shot">
-         <img src="${esc(d.src)}" alt="${esc(d.alt || "")}">
+         <img src="${esc(d.src)}" alt="${esc(d.alt || "")}"
+              onerror="this.dataset.broken=1;this.closest('.shot').classList.add('failed')">
          ${d.caption ? `<div class="cap">${esc(d.caption)}</div>` : ""}
        </div>`
     : `<div class="loading"></div>`,
@@ -83,7 +84,7 @@ const SCENE = {
     <div class="t-kicker">${esc(d.from || "")} → ${esc(d.to || "")}</div>
     <div class="shot">
       ${d.embed_url
-        ? `<iframe src="${esc(String(d.embed_url).replace("YOUR_MAPS_KEY", Q.get("mapskey") || "YOUR_MAPS_KEY"))}" style="height:min(48vh,520px)"
+        ? `<iframe src="${esc(String(d.embed_url).replace("YOUR_MAPS_KEY", Q.get("mapskey") || window.MAPS_KEY || "YOUR_MAPS_KEY"))}" style="height:min(48vh,520px)"
              loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>`
         : `<div class="loading" style="aspect-ratio:16/11"></div>`}
     </div>
@@ -362,18 +363,90 @@ function handle(frame) {
   if (fn) { try { fn(frame.payload || {}); } catch (e) { console.warn(e); } }
 }
 
-/* ---------- transport ---------- */
+/* ---------- source: LIVE vs DEMO ----------
+ * LIVE  = whatever backend is on the websocket.
+ * DEMO  = replay the fixture in the browser. Needs no backend at all, so
+ *         it always works even if the mic machine is down mid-event.
+ */
+let ws = null, demoTimer = null, mode = Q.get("mode") || "live";
 
-let ws;
+function stopDemo() { clearTimeout(demoTimer); demoTimer = null; }
+
+function closeWs() {
+  if (!ws) return;
+  ws.onclose = null; ws.onerror = null;
+  try { ws.close(); } catch (e) { /* already gone */ }
+  ws = null;
+}
+
 function connect() {
+  closeWs();
   ws = new WebSocket(WS_URL);
   ws.onopen = () => setStatus({ state: "listening" });
   ws.onmessage = (e) => { try { handle(JSON.parse(e.data)); } catch (err) {} };
-  ws.onclose = () => { setStatus({ state: "error", transcript: "reconnecting…" });
-                       setTimeout(connect, 1200); };
-  ws.onerror = () => ws.close();
+  ws.onclose = () => {
+    if (mode !== "live") return;
+    setStatus({ state: "error", transcript: "reconnecting…" });
+    setTimeout(() => mode === "live" && connect(), 1200);
+  };
+  ws.onerror = () => ws && ws.close();
 }
-connect();
+
+async function runDemo() {
+  stopDemo();
+  let rows = [];
+  try {
+    const r = await fetch("./demo.jsonl", { cache: "no-store" });
+    rows = (await r.text()).split("\n").filter(Boolean).map(JSON.parse);
+  } catch (e) {
+    setStatus({ state: "error", transcript: "demo fixture not found" });
+    return;
+  }
+  let i = 0;
+  const step = () => {
+    if (mode !== "demo") return;
+    if (i >= rows.length) { i = 0; demoTimer = setTimeout(step, 2500); return; }
+    const row = rows[i++];
+    demoTimer = setTimeout(() => { handle(row); step(); },
+                           Math.max(0, (row.delay || 0) * 1000));
+  };
+  step();
+}
+
+function setMode(next) {
+  if (next === mode && (ws || demoTimer)) return;
+  mode = next;
+  clearAll();
+  stopDemo();
+  if (mode === "demo") { closeWs(); runDemo(); }
+  else connect();
+  document.querySelectorAll("#src-toggle button").forEach((b) =>
+    b.classList.toggle("on", b.dataset.mode === mode));
+  try { localStorage.setItem("copresenter-mode", mode); } catch (e) { /* private */ }
+}
+
+/* remember the last choice; ?mode= wins */
+if (!Q.get("mode")) {
+  try { mode = localStorage.getItem("copresenter-mode") || "live"; }
+  catch (e) { /* private mode */ }
+}
+
+addEventListener("DOMContentLoaded", () => {
+  const t = document.getElementById("src-toggle");
+  if (t) t.onclick = (e) => {
+    const b = e.target.closest("button[data-mode]");
+    if (b) setMode(b.dataset.mode);
+  };
+  setMode(mode);
+});
+if (document.readyState !== "loading") {
+  const t = document.getElementById("src-toggle");
+  if (t) t.onclick = (e) => {
+    const b = e.target.closest("button[data-mode]");
+    if (b) setMode(b.dataset.mode);
+  };
+  setMode(mode);
+}
 
 window.sendPresenter = (action) => {
   if (ws && ws.readyState === 1)

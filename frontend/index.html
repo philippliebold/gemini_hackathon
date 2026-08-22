@@ -45,6 +45,12 @@
   <!-- nothing said yet -->
   <div id="idle"><span class="core-dots"><i></i><i></i><i></i><i></i></span></div>
 
+  <!-- source: live mic vs self-contained demo replay -->
+  <div id="src-toggle" class="src-toggle">
+    <button data-mode="live"><span class="msym">graphic_eq</span>Live</button>
+    <button data-mode="demo"><span class="msym">play_circle</span>Demo</button>
+  </div>
+
   <!-- the only persistent chrome -->
   <div id="hud">
     <span id="dots" class="core-dots"><i></i><i></i><i></i><i></i></span>
@@ -77,6 +83,8 @@
     <button id="picker-cancel" class="picker-cancel">Cancel</button>
   </div></div>
 
+  <!-- optional, gitignored: supplies window.MAPS_KEY. See local.example.js -->
+  <script src="./local.js" onerror="void 0"></script>
   <script src="./stage.js"></script>
   <script src="./dock.js"></script>
 </body>

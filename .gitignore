@@ -11,3 +11,6 @@ recordings/
 *.pcm
 env.example
 .env.*
+
+# local secrets for the static frontend
+frontend/local.js

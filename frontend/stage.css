@@ -93,6 +93,9 @@ html, body {
 /* one-at-a-time: every scene occupies the same cell so they cross-fade in
    place rather than the grid reflowing under them */
 #slots[data-n="1"] > .scene { grid-area: 1 / 1; z-index: 1; }
+/* keep a single scene visually centred and off the extreme edges */
+#slots[data-n="1"] > .scene > * { max-width: min(1300px, 88vw); }
+#slots[data-n="1"] > .scene { align-items: flex-start; }
 #slots[data-n="2"] { grid-template-columns: 1fr 1fr; }
 #slots[data-n="3"] { grid-template-columns: 1.4fr 1fr; grid-template-rows: 1fr 1fr; }
 #slots[data-n="3"] > .scene:first-child { grid-row: span 2; }
@@ -104,7 +107,7 @@ html, body {
   width: 100%; max-width: 100%; max-height: 100%; min-width: 0; overflow: hidden;
   display: flex; flex-direction: column; justify-content: center;
   transform-origin: center;
-  animation: scene-in 1.05s var(--ease-out) both;
+  animation: scene-in .85s var(--ease-out) .42s both;
 }
 @keyframes scene-in {
   from { opacity: 0; transform: translateY(46px) scale(.965); filter: blur(14px) }
@@ -112,7 +115,7 @@ html, body {
 }
 
 /* leaving is a real gesture, not a disappearance */
-.scene.out { animation: scene-out .72s var(--ease-io) both; }
+.scene.out { animation: scene-out .40s var(--ease-io) both; }
 @keyframes scene-out {
   to { opacity: 0; transform: translateY(-34px) scale(.955); filter: blur(16px) }
 }
@@ -222,17 +225,25 @@ html, body {
   -webkit-backdrop-filter: blur(24px) saturate(150%);
   box-shadow: 0 30px 90px -30px rgba(0,0,0,.75), inset 0 1px 0 rgba(255,255,255,.14);
   padding: clamp(20px, 2.4vw, 40px);
-  width: 100%;
+  width: 100%; max-width: min(1100px, 82vw); margin-inline: auto;
 }
 
 /* ── Media ──────────────────────────────────────────────────────────── */
 
 .shot {
   position: relative; width: 100%; border-radius: 26px; overflow: hidden;
+  max-height: 74vh;
+  display: block;
   box-shadow: 0 40px 110px -32px rgba(0,0,0,.85);
   background: rgba(255,255,255,.05);
 }
-.shot img, .shot iframe { display: block; width: 100%; border: 0; }
+/* height:100% inside an auto-height flex container resolves to 0 and the
+   picture vanishes. Let the image size itself and cap it instead. */
+.shot img { display: block; width: 100%; height: auto; max-height: 74vh;
+            object-fit: cover; border: 0; }
+.shot iframe { display: block; width: 100%; height: min(56vh, 560px); border: 0; }
+/* a broken src used to leave a 20px sliver with a vignette on it */
+.shot img[data-broken] { display: none; }
 .shot img { animation: shot-in 1.5s var(--ease-out) both; }
 @keyframes shot-in { from { opacity: 0; transform: scale(1.07) } }
 /* a soft vignette so text over/near it stays readable */
@@ -240,6 +251,7 @@ html, body {
   content: ""; position: absolute; inset: 0; pointer-events: none;
   background: linear-gradient(to top, rgba(6,18,38,.55), transparent 46%);
 }
+.scene:has(> .shot) { align-items: center; }
 .shot .cap {
   position: absolute; left: 0; right: 0; bottom: 0; z-index: 2;
   padding: 22px 26px; font-size: clamp(13px, 1.05vw, 19px); color: var(--on-hi);

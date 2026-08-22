@@ -130,3 +130,30 @@
   font-family: "Google Sans", Roboto, sans-serif;
 }
 .picker-cancel:hover { background: rgba(66,133,244,.18); }
+
+/* ── Source toggle (top right): live mic, or the self-contained demo ──── */
+
+.src-toggle {
+  position: fixed; top: 22px; right: 22px; z-index: 30;
+  display: flex; gap: 4px; padding: 5px;
+  background: rgba(12, 30, 58, .72);
+  border: 1px solid rgba(255,255,255,.14);
+  border-radius: 999px;
+  backdrop-filter: blur(22px) saturate(160%);
+  -webkit-backdrop-filter: blur(22px) saturate(160%);
+  box-shadow: 0 18px 50px -22px rgba(0,0,0,.75);
+  transition: opacity .45s cubic-bezier(.16,1,.3,1);
+}
+.src-toggle button {
+  display: inline-flex; align-items: center; gap: 7px;
+  height: 34px; padding: 0 15px; border: none; cursor: pointer;
+  border-radius: 999px; background: transparent; color: #B9D0F0;
+  font-family: "Google Sans", Roboto, sans-serif; font-size: 13px; font-weight: 500;
+  transition: background .2s ease, color .2s ease;
+}
+.src-toggle button .msym { font-size: 17px; }
+.src-toggle button:hover { color: #EAF2FF; }
+.src-toggle button.on { background: rgba(66,133,244,.34); color: #EAF2FF; }
+.src-toggle button.on .msym { color: #7FB0FF; font-variation-settings: "FILL" 1; }
+
+body.clean .src-toggle { opacity: 0; pointer-events: none; }
