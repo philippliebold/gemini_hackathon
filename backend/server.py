@@ -56,7 +56,7 @@ async def on_presenter(action: str | None) -> None:
     """Presenter keyboard commands from the display."""
     if action == "clear":
         broadcast(ops.canvas_clear())
-    # TODO(person B): undo / pause / resume
+    # TODO: undo / pause / resume
 
 
 async def serve():

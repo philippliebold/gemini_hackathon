@@ -202,7 +202,7 @@ def tool_show_table(columns: list[str], rows: list[list[str]],
 def tool_show_route(origin: str, destination: str, mode: str = "walking", **_):
     data = {"from": origin, "to": destination, "mode": mode}
     if CFG.maps_key:
-        # TODO(person B): call Directions API, fill duration/distance/polyline.
+        # TODO: call Directions API, fill duration/distance/polyline.
         data["embed_url"] = (
             "https://www.google.com/maps/embed/v1/directions"
             f"?key={CFG.maps_key}&origin={origin}&destination={destination}&mode={mode}"
@@ -219,7 +219,7 @@ def tool_show_image(prompt: str, caption: str | None = None, **_):
     # placeholder is what keeps perceived latency under 2s.
     f = ops.block_add("image", {"src": None, "caption": caption or prompt,
                                 "alt": prompt}, w=420, h=320, enter="fade")
-    # TODO(person B): kick off async image gen, then broadcast
+    # TODO: kick off async image gen, then broadcast
     #   ops.block_update(block_id, {"src": data_uri})
     return [f], {"block_id": f["payload"]["id"], "status": "generating"}
 

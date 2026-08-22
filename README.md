@@ -52,18 +52,24 @@ Backend and frontend never import from each other. The only coupling is
 
 ## Files, and who owns them
 
-| File | Owner | What it is |
+Two teams. **Backend pair** owns `backend/`, **frontend pair** owns `frontend/`.
+Neither team touches the other's directory.
+
+| File | Team | What it is |
 |---|---|---|
-| `backend/gemini_live.py` | A | Live session, system prompt, the "when to draw" taste |
-| `backend/audio.py` | A | Mic → 16 kHz PCM |
-| `backend/tools.py` | B | Function declarations + implementations |
-| `backend/server.py` | B | WebSocket fan-out |
-| `frontend/app.js` | C | Camera, block lifecycle, links, WS client |
-| `frontend/blocks.js` | D | One renderer per block type |
-| `frontend/styles.css` | D | Look and feel |
+| `backend/gemini_live.py` | backend | Live session, system prompt, the "when to draw" taste |
+| `backend/audio.py` | backend | Mic → 16 kHz PCM |
+| `backend/tools.py` | backend | Function declarations + implementations |
+| `backend/server.py` | backend | WebSocket fan-out |
+| `frontend/app.js` | frontend | Camera, block lifecycle, links, WS client |
+| `frontend/blocks.js` | frontend | One renderer per block type |
+| `frontend/styles.css` | frontend | Look and feel |
 | `CONTRACT.md`, `shared/` | everyone reads, nobody edits alone | |
 
-Stay in your files and you will not hit a merge conflict.
+Within a pair, split by file rather than working the same one at once — the
+natural seam is session/audio vs. plumbing on the backend, and canvas shell vs.
+renderers on the frontend. That's advice, not an assignment; sort it out
+between the two of you.
 
 ## Model note
 

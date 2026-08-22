@@ -23,8 +23,8 @@ the code exists to serve it. Do not build features and hope a demo emerges.
 
 1. **`CONTRACT.md` is frozen.** Changing it requires saying so out loud to
    everyone. A silent schema change is the only thing that can actually kill us.
-2. **Stay in your own files** (see the table in README). If you need something
-   in someone else's file, ask them; don't edit it.
+2. **Stay in your own directory.** Backend owns `backend/`, frontend owns
+   `frontend/`. If you need something on the other side, ask; don't edit it.
 3. **Commit small and push often.** `git pull --rebase` before every push.
 4. **The frontend never waits on the backend.** `mock_server.py` replays
    `shared/fixtures/demo.jsonl`. If you're blocked on the Gemini side, you've
@@ -35,15 +35,16 @@ the code exists to serve it. Do not build features and hope a demo emerges.
 
 ## Owners
 
-| | Owner | Mission |
-|---|---|---|
-| **A** | *(name)* | **The ear.** Mic → Live API → tool calls. Owns the system prompt and, with it, the taste of *when to draw*. |
-| **B** | *(name)* | **The plumbing.** WebSocket, tool implementations, maps route, image gen. Owns "the tool call visibly did something real". |
-| **C** | *(name)* | **The canvas.** Pan/zoom, block lifecycle, links, layout animation. Owns "does this feel alive". |
-| **D** | *(name)* | **The look.** Block renderers, typography, motion. Owns "does this look like a product or a hackathon project". |
+Two teams, two people each.
 
-A+B share `backend/`. C+D share `frontend/`. Neither pair touches the other's
-directory.
+| | Team | Mission |
+|---|---|---|
+| **Backend** | *(names)* | **The ear and the plumbing.** Mic → Live API → tool calls → WebSocket. Owns the taste of *when to draw*, and "the tool call visibly did something real". |
+| **Frontend** | *(names)* | **The canvas and the look.** Pan/zoom, block lifecycle, renderers, motion. Owns "does this feel alive" and "does this look like a product". |
+
+Backend owns `backend/`. Frontend owns `frontend/`. Neither team touches the
+other's directory. Within a team, split by file so two people aren't in the same
+one at once.
 
 ---
 
@@ -53,8 +54,9 @@ directory.
 - [ ] Read `CONTRACT.md` out loud. Argue now, freeze it, never again.
 - [ ] Everyone runs the mock loop and sees blocks on screen (README, 60 seconds).
       **This is the gate — nobody writes code until their machine shows the mock.**
-- [ ] Assign the four names above.
-- [ ] One person gets `GEMINI_API_KEY` from AI Studio and shares it with A and B.
+- [ ] Split into the two teams above, two people each.
+- [ ] One person gets `GEMINI_API_KEY` from AI Studio and shares it with the
+      backend pair.
 - [ ] **Write the 90-second demo script now.** Literally the sentences the
       presenter will say, and what should appear after each. Put it in
       `DEMO.md`. Everything downstream is built to make that script work.
@@ -64,30 +66,31 @@ directory.
 Target: **one real sentence into a real mic puts one real block on screen.**
 Ugly is fine. This is the only milestone that de-risks the project.
 
-- **A** — Get `gemini_live.py` connecting. Confirm audio reaches the model
-  (watch `input_transcription` in the status line). Get *any* tool call to fire.
-- **B** — `server.py` runs and fans out. Verify frames arrive with `wscat` or the
-  browser console. Then `show_route` against the real Directions API.
-- **C** — Real WS data driving the canvas. Camera feels good: smooth pan, fit-to-
-  content on `canvas.focus`, no jank when 8 blocks are up.
-- **D** — Make `text`, `stat`, and `diagram` look genuinely good against the mock.
-  These three carry the demo. Big type, high contrast, readable from the back
-  of the room.
+- **Backend** — Get `gemini_live.py` connecting; confirm audio reaches the model
+  (watch `input_transcription` in the status line) and get *any* tool call to
+  fire. In parallel, `server.py` running and fanning out — verify frames arrive
+  with `wscat` or the browser console.
+- **Frontend** — Real WS data driving the canvas. Camera feels good: smooth pan,
+  fit-to-content on `canvas.focus`, no jank at 8 blocks. In parallel, make
+  `text`, `stat`, and `diagram` look genuinely good against the mock — these
+  three carry the demo. Big type, high contrast, readable from the back of the
+  room.
 
 **Checkpoint at the 2-hour mark:** if the spine isn't alive, cut camera input and
 image generation immediately and put everyone on the spine.
 
 ### Phase 2 — middle block, "make it feel like a co-presenter"
 
-- **A** — Tune the system prompt. This is the highest-leverage work of the day.
-  The failure mode is drawing on *every* sentence. Bias hard toward silence.
-  Rehearse against a recorded talk (`--pcm`) so tuning is repeatable, not vibes.
-- **B** — Real maps route with a live polyline. Then async image generation with
-  the placeholder→update two-phase pattern already stubbed in `tools.py`.
-- **C** — Auto-arrange: when a 4th block lands, reflow so nothing overlaps and
-  the camera reframes. This is the "it's alive" beat.
-- **D** — `chart`, `table`, `map`, `image`, `code`. Then a pass on motion —
-  entrances should feel deliberate, not bouncy.
+- **Backend** — Tune the system prompt. This is the highest-leverage work of the
+  day. The failure mode is drawing on *every* sentence; bias hard toward
+  silence. Rehearse against a recorded talk (`--pcm`) so tuning is repeatable,
+  not vibes. Then the real maps route with a live polyline, and async image
+  generation using the placeholder→update two-phase pattern already stubbed in
+  `tools.py`.
+- **Frontend** — Auto-arrange: when a 4th block lands, reflow so nothing overlaps
+  and the camera reframes. This is the "it's alive" beat. Then the remaining
+  renderers — `chart`, `table`, `map`, `image`, `code` — and a pass on motion so
+  entrances feel deliberate, not bouncy.
 
 ### Phase 3 — last 90 minutes, "lock it"
 
@@ -132,6 +135,6 @@ image generation immediately and put everyone on the spine.
   wire protocol pass, but C/D should open it first thing and expect small fixes.
 - `tools.py` maps route returns a canned polyline unless `GOOGLE_MAPS_API_KEY`
   is set; `show_image` returns a placeholder and never updates. Both are marked
-  `TODO(person B)`.
+  `TODO(backend)`.
 - Camera input from the laptop webcam is not scaffolded at all. It is a
   nice-to-have — only start it if the spine is done well before Phase 2 ends.
