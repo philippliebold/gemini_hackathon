@@ -291,3 +291,70 @@ addEventListener("keydown", (e) => {
   if (k === "h") setClean(!document.body.classList.contains("clean"));
   if (e.key === "Escape") setClean(false);
 });
+
+/* ---------- browser speech recognition ----------
+ * A fallback for the machine where the Python mic stack will not build:
+ * Chrome transcribes locally (webkitSpeechRecognition, no key, no quota) and
+ * we post each finished sentence to the backend as `said:<text>`. The brain
+ * turns it into canvas ops exactly as it does for the Live path.
+ *
+ * Deliberately NOT the default: real Live audio hears tone and overlap that a
+ * transcript throws away. This is the "get a demo on screen" path.
+ */
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let recog = null;
+
+function setListenUI(on) {
+  if (!dock.listen) return;
+  dock.listen.classList.toggle("on", on);
+  dock.listen.querySelector(".msym").textContent = on ? "graphic_eq" : "record_voice_over";
+  dock.listen.title = on ? "Stop browser transcription"
+                         : "Transcribe in this browser (no mic setup needed)";
+}
+
+function startListening() {
+  if (!SR) {
+    alert("This browser has no speech recognition. Use Chrome.");
+    return;
+  }
+  recog = new SR();
+  recog.continuous = true;
+  recog.interimResults = true;
+  recog.lang = document.documentElement.lang || "en-US";
+
+  recog.onresult = (e) => {
+    let interim = "";
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const chunk = e.results[i][0].transcript.trim();
+      if (!chunk) continue;
+      if (e.results[i].isFinal) window.sendPresenter(`said:${chunk}`);
+      else interim = chunk;
+    }
+    /* show what is being heard even before the sentence lands */
+    const cap = document.getElementById("caption");
+    if (cap && interim) cap.textContent = interim;
+  };
+
+  /* Chrome stops on its own after a pause; keep it alive for a whole talk. */
+  recog.onend = () => { if (recog) { try { recog.start(); } catch (e) {} } };
+  recog.onerror = (e) => {
+    if (e.error === "not-allowed" || e.error === "service-not-allowed") {
+      stopListening();
+      alert("Microphone permission denied.");
+    }
+  };
+
+  try { recog.start(); setListenUI(true); }
+  catch (e) { stopListening(); }
+}
+
+function stopListening() {
+  if (recog) { const r = recog; recog = null; try { r.stop(); } catch (e) {} }
+  setListenUI(false);
+}
+
+dock.listen = document.getElementById("listen-btn");
+if (dock.listen) {
+  if (!SR) dock.listen.style.display = "none";     // not Chrome: hide it
+  dock.listen.onclick = () => (recog ? stopListening() : startListening());
+}

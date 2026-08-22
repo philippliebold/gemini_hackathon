@@ -128,6 +128,19 @@ async def on_presenter(action: str | None) -> None:
         if brain is not None:
             await brain.set_enabled(action == "brain_on")
             push_mics()
+    elif action and action.startswith("said:"):
+        # Transcript from the browser's own speech recognition. Lets the screen
+        # drive the canvas with no PortAudio, no sounddevice and no Live audio
+        # session -- the three things that break on someone else's laptop.
+        line = action.split(":", 1)[1].strip()
+        if not line:
+            return
+        broadcast(ops.status("thinking", line))
+        brain = CONTROL.get("brain")
+        if brain is None:
+            print("[said] no brain attached; run with --brain")
+            return
+        brain.feed(line)
     elif action == "mics_refresh":
         push_mics()
     # TODO: pause / resume
