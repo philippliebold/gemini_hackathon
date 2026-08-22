@@ -50,6 +50,83 @@ async def _generate_image(block_id: str, prompt: str) -> None:
     except Exception as exc:                      # never kill the session
         print(f"[image] {type(exc).__name__}: {exc}")
 
+def _decode_polyline(enc: str) -> list[list[float]]:
+    """Google's encoded polyline -> [[lat, lng], ...]. ~15 lines beats a dependency."""
+    pts, lat, lng, i = [], 0, 0, 0
+    while i < len(enc):
+        for is_lat in (True, False):
+            shift, result = 0, 0
+            while i < len(enc):
+                b = ord(enc[i]) - 63
+                i += 1
+                result |= (b & 0x1F) << shift
+                shift += 5
+                if b < 0x20:
+                    break
+            d = ~(result >> 1) if result & 1 else (result >> 1)
+            if is_lat:
+                lat += d
+            else:
+                lng += d
+        pts.append([lat / 1e5, lng / 1e5])
+    return pts
+
+
+_TRAVEL_MODE = {"walking": "WALK", "driving": "DRIVE",
+                "transit": "TRANSIT", "bicycling": "BICYCLE"}
+
+
+def _human(seconds: int, metres: int) -> tuple[str, str]:
+    mins = max(1, round(seconds / 60))
+    dur = f"{mins} min" if mins < 60 else f"{mins // 60} h {mins % 60} min"
+    dist = f"{metres} m" if metres < 1000 else f"{metres / 1000:.1f} km"
+    return dur, dist
+
+
+async def _fill_route(block_id: str, origin: str, destination: str,
+                      mode: str) -> None:
+    """Fetch the real duration/distance/polyline and update the block in place.
+
+    Uses the Routes API, not the legacy Directions API — the latter answers
+    REQUEST_DENIED ("You're calling a legacy API") on any recently created project.
+
+    Two-phase like image generation: the embed iframe is already on screen showing
+    the real route, so this only fills the overlay chip and the SVG fallback. A
+    failure leaves the map standing rather than blanking it.
+    """
+    if not BROADCAST or not CFG.maps_key:
+        return
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=4.0) as http:
+            r = await http.post(
+                "https://routes.googleapis.com/directions/v2:computeRoutes",
+                headers={"X-Goog-Api-Key": CFG.maps_key,
+                         "X-Goog-FieldMask": "routes.duration,"
+                                             "routes.distanceMeters,"
+                                             "routes.polyline.encodedPolyline"},
+                json={"origin": {"address": origin},
+                      "destination": {"address": destination},
+                      "travelMode": _TRAVEL_MODE.get(mode, "WALK")})
+        body = r.json()
+        routes = body.get("routes") or []
+        if not routes:
+            err = (body.get("error") or {}).get("message", body)
+            print(f"[route] no route: {str(err)[:130]}")
+            return
+        route = routes[0]
+        secs = int(str(route.get("duration", "0s")).rstrip("s") or 0)
+        dur, dist = _human(secs, int(route.get("distanceMeters", 0)))
+        patch = {"duration": dur, "distance": dist}
+        enc = (route.get("polyline") or {}).get("encodedPolyline")
+        if enc:
+            patch["polyline"] = _decode_polyline(enc)
+        BROADCAST(ops.block_update(block_id, patch))
+        print(f"[route] {origin} -> {destination}: {dur}, {dist}")
+    except Exception as exc:                      # never kill the session
+        print(f"[route] {type(exc).__name__}: {exc}")
+
+
 # --- the two params that make the board evolve ------------------------------
 # Spliced into every show_* declaration. This is the whole decision surface:
 #   same key, no revises  -> the existing block grows
@@ -308,18 +385,34 @@ def tool_show_table(key: str, columns: list[str] | None = None,
 def tool_show_route(key: str, origin: str | None = None,
                     destination: str | None = None, mode: str = "walking",
                     revises: str | None = None, **_):
+    from urllib.parse import quote_plus
     data = {"from": origin, "to": destination, "mode": mode}
     if CFG.maps_key:
-        # TODO: call Directions API, fill duration/distance/polyline.
+        # The iframe shows the real route immediately; duration/distance/polyline
+        # arrive a moment later via _fill_route so nothing waits on the network.
         data["embed_url"] = (
             "https://www.google.com/maps/embed/v1/directions"
-            f"?key={CFG.maps_key}&origin={origin}&destination={destination}&mode={mode}"
+            f"?key={CFG.maps_key}&origin={quote_plus(origin or '')}"
+            f"&destination={quote_plus(destination or '')}&mode={mode}"
         )
+        # The iframe draws the real route straight away. These are placeholders for
+        # the overlay chip until _fill_route lands, and they stay this way if the
+        # Routes API is not enabled on the project — a real map with no numbers,
+        # rather than invented ones.
+        data |= {"duration": "…", "distance": ""}
     else:
-        data |= {"duration": "8 min", "distance": "650 m",
+        # No key: say so rather than showing an invented 8-minute walk. PLAN.md
+        # requires nothing be precomputed, and a fake route is exactly that.
+        data |= {"duration": "no maps key", "distance": "",
                  "polyline": [[0, 0], [30, 60], [80, 70], [120, 140], [190, 160]]}
     frames, result = _emit("map", key, data, revises,
                            needs=("from", "to"), w=420, h=320)
+    if CFG.maps_key and result.get("block_id"):
+        try:
+            asyncio.get_running_loop().create_task(
+                _fill_route(result["block_id"], origin, destination, mode))
+        except RuntimeError:
+            pass                                  # no loop (tests): iframe only
     return frames, result | {"duration": data.get("duration")}
 
 
