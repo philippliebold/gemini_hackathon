@@ -39,8 +39,8 @@ Two teams, two people each.
 
 | | Team | Mission |
 |---|---|---|
-| **Backend** | *(names)* | **The ear and the plumbing.** Mic → Live API → tool calls → WebSocket. Owns the taste of *when to draw*, and "the tool call visibly did something real". |
-| **Frontend** | *(names)* | **The canvas and the look.** Pan/zoom, block lifecycle, renderers, motion. Owns "does this feel alive" and "does this look like a product". |
+| **Backend** | *Till, Marwin* | **The ear and the plumbing.** Mic → Live API → tool calls → WebSocket. Owns the taste of *when to draw*, and "the tool call visibly did something real". |
+| **Frontend** | *Philipp, Yufei* | **The canvas and the look.** Pan/zoom, block lifecycle, renderers, motion. Owns "does this feel alive" and "does this look like a product". |
 
 Backend owns `backend/`. Frontend owns `frontend/`. Neither team touches the
 other's directory. Within a team, split by file so two people aren't in the same
