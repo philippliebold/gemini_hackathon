@@ -55,6 +55,10 @@ def worth_asking(line: str) -> bool:
     return len(t) >= MIN_CHARS and len(words) >= 4
 WINDOW = 6               # utterances of context handed over
 REPROBE_S = 45.0         # how often to try to climb back to the primary model
+# A model that answers in 25 s is not "available" for this product — the visual has
+# to land while the speaker is still on the topic. Probes are judged on latency, not
+# just on returning something.
+PROBE_TIMEOUT_S = float(os.getenv("BRAIN_PROBE_TIMEOUT", "4.0"))
 # 3.7-flash under load returns 503s and takes anywhere from 2 s to 90 s for the same
 # prompt. Killing a request because it is slow just loses the visual entirely — late
 # is strictly better than never, and the speaker is usually still on the topic. This
@@ -119,8 +123,12 @@ class Brain:
         # Preference order. thinking_budget=0 roughly halves 3.7-flash's latency
         # (3.0s -> 1.7s measured); older flash models reject the parameter with a
         # 400, so it is per-model rather than global.
+        # Order is preference, but selection is gated on measured latency below.
+        # 3.1-flash-lite with thinking off answered in 0.95 s while 3.7-flash was
+        # timing out past 25 s under hackathon load; it is in the chain so the
+        # screen keeps up when the bigger model cannot.
         self.chain: list[tuple[str, int | None]] = [
-            (CFG.model, 0), (CFG.model, None),
+            (CFG.model, 0), (CFG.model_fast, 0),
             (CFG.model_fallback, None), (CFG.model_fallback2, None)]
         self.model, self.think = self.chain[0]
         self.recent: list[str] = []
@@ -157,9 +165,14 @@ class Brain:
         for model, think in self.chain:
             t0 = time.time()
             try:
-                await self.client.aio.models.generate_content(
-                    model=model, contents="Reply with the single word ok.",
-                    config=self._cfg(think))
+                await asyncio.wait_for(
+                    self.client.aio.models.generate_content(
+                        model=model, contents="Reply with the single word ok.",
+                        config=self._cfg(think)),
+                    timeout=PROBE_TIMEOUT_S)
+            except asyncio.TimeoutError:
+                print(f"[brain] {model} too slow (>{PROBE_TIMEOUT_S:.0f}s) — skipping")
+                continue
             except Exception as e:  # noqa: BLE001
                 print(f"[brain] {model} (thinking={think}) unavailable: "
                       f"{str(e)[:70]}")
@@ -265,9 +278,12 @@ class Brain:
             return
         self._demoted_at = time.time()          # don't hammer it
         try:
-            await self.client.aio.models.generate_content(
-                model=CFG.model, contents="ok", config=self._cfg(0))
-        except Exception:                        # noqa: BLE001 - still unavailable
+            # Must be FAST to be worth reclaiming, not merely alive.
+            await asyncio.wait_for(
+                self.client.aio.models.generate_content(
+                    model=CFG.model, contents="ok", config=self._cfg(0)),
+                timeout=PROBE_TIMEOUT_S)
+        except Exception:                        # noqa: BLE001 - slow or unavailable
             return
         self.model, self.think = CFG.model, 0
         self._demoted_at = 0.0
@@ -288,17 +304,28 @@ class Brain:
         )
         t0 = time.time()
         self.broadcast(ops.status("thinking", line))
-        try:
-            resp = await self.client.aio.models.generate_content(
-                model=self.model, contents=prompt, config=self._cfg(self.think))
-        except Exception as e:                       # noqa: BLE001
-            # "high demand" is transient and frequent right now; one prompt retry is
-            # far cheaper than dropping the visual.
-            if "503" not in str(e) and "UNAVAILABLE" not in str(e):
-                raise
-            print(f"[brain] 503, retrying once")
-            resp = await self.client.aio.models.generate_content(
-                model=self.model, contents=prompt, config=self._cfg(self.think))
+        # 3.7-flash is the model we want, but under hackathon load it returns 503
+        # "high demand" constantly — 7 in one short run. Rather than lose the visual,
+        # retry it once and then step sideways through the chain. The primary is
+        # still reclaimed on a timer, so this never becomes a permanent demotion.
+        attempts = [(self.model, self.think), (self.model, self.think)]
+        attempts += [c for c in self.chain if c[0] != self.model]
+        last: Exception | None = None
+        resp = None
+        for i, (model, think) in enumerate(attempts):
+            try:
+                resp = await self.client.aio.models.generate_content(
+                    model=model, contents=prompt, config=self._cfg(think))
+                if model != self.model:
+                    print(f"[brain] {self.model} unavailable, drew with {model}")
+                break
+            except Exception as e:                   # noqa: BLE001
+                last = e
+                if "503" not in str(e) and "UNAVAILABLE" not in str(e) \
+                        and "429" not in str(e):
+                    raise
+        if resp is None:
+            raise last if last else RuntimeError("no model answered")
         fcs = [p.function_call
                for c in (resp.candidates or [])
                for p in ((c.content.parts if c.content else None) or [])

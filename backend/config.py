@@ -21,6 +21,9 @@ class Config:
     manual_activity: bool = os.getenv("MANUAL_ACTIVITY", "0").lower() \
         in ("1", "true", "yes")
     model: str = os.getenv("GEMINI_MODEL", "gemini-3.7-flash")
+    # Measured 0.95 s with thinking off while 3.7-flash timed out past 25 s under
+    # load. Used whenever the primary is too slow to keep up with a talk.
+    model_fast: str = os.getenv("GEMINI_MODEL_FAST", "gemini-3.1-flash-lite")
     # Tried in order, only if the primary is unusable at startup (429 quota, 503).
     model_fallback: str = os.getenv("GEMINI_MODEL_FALLBACK", "gemini-3.6-flash")
     model_fallback2: str = os.getenv("GEMINI_MODEL_FALLBACK2", "gemini-3.5-flash")
