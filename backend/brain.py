@@ -15,6 +15,7 @@ Bonus: text tokens instead of audio tokens for the expensive half, and the evolv
 context becomes something we hand over explicitly rather than hope the session kept.
 """
 import asyncio
+import os
 import re
 import time
 from collections.abc import Callable
@@ -54,8 +55,14 @@ def worth_asking(line: str) -> bool:
     return len(t) >= MIN_CHARS and len(words) >= 4
 WINDOW = 6               # utterances of context handed over
 REPROBE_S = 45.0         # how often to try to climb back to the primary model
-DEADLINE_S = 4.5         # abandon a decision that misses the moment
-MAX_INFLIGHT = 2         # a slow call must not block the next sentence
+# 3.7-flash under load returns 503s and takes anywhere from 2 s to 90 s for the same
+# prompt. Killing a request because it is slow just loses the visual entirely — late
+# is strictly better than never, and the speaker is usually still on the topic. This
+# is a safety net against a hung request, not a latency policy.
+DEADLINE_S = float(os.getenv("BRAIN_DEADLINE", "30.0"))
+# Several sentences may be in flight together: one slow call must never hold up the
+# sentences spoken after it.
+MAX_INFLIGHT = int(os.getenv("BRAIN_INFLIGHT", "4"))
 
 SYSTEM = """\
 You are a silent co-presenter. A human is giving a live talk to an audience and you
@@ -281,8 +288,17 @@ class Brain:
         )
         t0 = time.time()
         self.broadcast(ops.status("thinking", line))
-        resp = await self.client.aio.models.generate_content(
-            model=self.model, contents=prompt, config=self._cfg(self.think))
+        try:
+            resp = await self.client.aio.models.generate_content(
+                model=self.model, contents=prompt, config=self._cfg(self.think))
+        except Exception as e:                       # noqa: BLE001
+            # "high demand" is transient and frequent right now; one prompt retry is
+            # far cheaper than dropping the visual.
+            if "503" not in str(e) and "UNAVAILABLE" not in str(e):
+                raise
+            print(f"[brain] 503, retrying once")
+            resp = await self.client.aio.models.generate_content(
+                model=self.model, contents=prompt, config=self._cfg(self.think))
         fcs = [p.function_call
                for c in (resp.candidates or [])
                for p in ((c.content.parts if c.content else None) or [])

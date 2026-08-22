@@ -36,6 +36,11 @@ FINAL_GAP_S = float(os.getenv("EAR_GAP", "0.45"))
 # Hard cap on how long a visual can be held back by someone who does not pause.
 MAX_UTTERANCE_S = float(os.getenv("EAR_MAX", "7.0"))
 MIN_UTTERANCE_S = 0.45   # shorter than this is a cough
+# Whisper punctuates. If the interim transcript has already closed a sentence, send
+# it now rather than waiting for the speaker to stop — you should be able to keep
+# talking and still have the last thought land.
+SEND_ON_SENTENCE = os.getenv("EAR_SENTENCE", "1").lower() in ("1", "true", "yes")
+SENTENCE_MIN_WORDS = 4
 
 
 class LocalEar:
@@ -127,13 +132,27 @@ class LocalEar:
                     self.memory.add_utterance(text + " ")
                 continue
 
-            # Still talking: refresh the ticker so the room can see it is alive.
+            # Still talking: refresh the ticker so the room can see it is alive,
+            # and cut on a finished sentence so a long talker still gets visuals.
             if time.time() - self._last_interim >= INTERIM_EVERY_S and secs >= 0.8:
                 self._last_interim = time.time()
                 try:
                     text = await self._transcribe(self._audio())
                 except Exception:                    # noqa: BLE001
                     continue
-                if text and text != self._interim_text:
-                    self._interim_text = text
-                    self.broadcast(ops.status("listening", text))
+                if not text or text == self._interim_text:
+                    continue
+                self._interim_text = text
+                self.broadcast(ops.status("listening", text))
+
+                if SEND_ON_SENTENCE and text.rstrip()[-1:] in ".!?" \
+                        and len(text.split()) >= SENTENCE_MIN_WORDS:
+                    # A closed sentence: hand it over and start a fresh buffer. The
+                    # speaker does not have to pause to be heard.
+                    self._reset()
+                    self.utterances += 1
+                    print(f"[ear] {secs:.1f}s (sentence) -> {text[:80]!r}")
+                    if self.brain is not None:
+                        self.brain.feed(text)
+                    if self.memory is not None:
+                        self.memory.add_utterance(text + " ")
