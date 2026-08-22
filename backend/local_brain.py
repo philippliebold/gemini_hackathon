@@ -62,8 +62,10 @@ def _clean_place(p: str) -> str:
     return p.strip(" .,")
 _MATH_CUE = re.compile(
     r"\b(\w+)\s+(?:equals|is equal to)\s+(.{2,60}?)(?:[.,!?]|$)", re.I)
+# "that's it" is deliberately absent: it is ordinary mid-talk filler, and it put
+# the closing recap on screen four times in the first minute of a real session.
 _SUMMARY_CUE = re.compile(
-    r"\b(?:to sum up|in summary|to summari[sz]e|to wrap up|that'?s it|"
+    r"\b(?:to sum up|in summary|to summari[sz]e|to wrap up|"
     r"in conclusion|so overall)\b", re.I)
 
 

@@ -23,6 +23,12 @@ MAX_BULLETS = 6         # a card may grow past the per-call cap of 4, but not fo
 MAX_BRANCHES = 2        # a subject may hold a disagreement, not an argument
 KEY_CUTOFF = 0.8        # difflib similarity for collapsing near-duplicate keys
 COOLDOWN_S = 6.0        # per-key debounce; one long sentence must not update thrice
+# How long a topic keeps the shape it was first given. Measured over one real
+# session: the `sentry` key cycled hero -> photo -> concept -> hero -> photo, and
+# the room watched one card flip between an emoji, a photograph and a bullet list.
+# Eight of 51 writes were these type-change replaces. Growing a card is alive;
+# swapping its form under the audience is thrash.
+FORM_LOCK_S = float(__import__("os").getenv("FORM_LOCK", "12.0"))
 FOCUS_THROTTLE_S = 3.5  # camera moves per second budget, or the room gets seasick
 
 # These MIRROR frontend/stage.js. The stage retires a scene after LIFETIME with no

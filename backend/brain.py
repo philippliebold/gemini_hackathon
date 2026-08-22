@@ -29,7 +29,11 @@ import runtime
 import tools
 from config import CFG
 
-DEBOUNCE_S = 0.45        # flush a transcript this long after the words stop
+# Only for the --live path, where input_transcription arrives as overlapping
+# fragments that have to settle. The local ear hands over whole utterances and
+# already knows where they ended, so debouncing those was 0.45 s of waiting for a
+# settling that had already happened — see feed(complete=True).
+DEBOUNCE_S = float(os.getenv("BRAIN_DEBOUNCE", "0.45"))
 MIN_CHARS = 18           # "so, right" is not worth a call
 
 # Free local gate, applied BEFORE any API call. Two reasons it earns its place:
@@ -43,8 +47,42 @@ FILLER = re.compile(
     r"[\s,.!?\-]*$", re.I)
 
 
+# Words that carry no subject. A line made only of these is grammar, not content.
+_EMPTY = {
+    "the", "a", "an", "and", "or", "but", "so", "then", "that", "this", "it",
+    "is", "are", "was", "were", "be", "been", "am", "do", "does", "did", "to",
+    "of", "in", "on", "at", "for", "with", "as", "we", "i", "you", "they", "he",
+    "she", "our", "your", "my", "his", "her", "their", "just", "really", "very",
+    "actually", "basically", "like", "about", "here", "there", "what", "when",
+    "how", "why", "now", "okay", "ok", "right", "well", "yeah", "yep", "no",
+    "not", "going", "gonna", "get", "got", "go", "know", "think", "mean", "say",
+    "said", "would", "could", "should", "can", "will", "let", "lets", "if",
+    "all", "some", "any", "one", "thing", "things", "stuff", "kind", "sort",
+}
+# Two content words is the bar. Measured over one real session the old bar let
+# 51 of 62 utterances through to the model, and the model then drew on ALL of
+# them — restraint was 0%, and the only thing holding back visual noise was a
+# mechanical cooldown. Half that traffic was lines like "So I'm going to go."
+MIN_CONTENT_WORDS = int(os.getenv("BRAIN_MIN_CONTENT", "2"))
+
+
+def _stem(word: str) -> str:
+    """Lowercase and drop a contraction tail, so 'That\'s' tests as 'that'."""
+    w = word.lower()
+    for tail in ("n't", "'s", "'re", "'ve", "'ll", "'d", "'m"):
+        if w.endswith(tail) and len(w) > len(tail):
+            return w[: -len(tail)]
+    return w
+
+
 def worth_asking(line: str) -> bool:
-    """Cheap local salience check. Conservative: only drops obvious non-content."""
+    """Cheap local salience check, applied BEFORE any API call.
+
+    This is deliberately a single pure function of one string: it is the seat a
+    local Gemma salience model drops straight into (IDEA.md's second track), and
+    until then plain word counting does the same job for free. Restraint is a
+    product feature, not an optimisation — see taste.WHEN.
+    """
     t = line.strip()
     if FILLER.match(t):
         return False
@@ -53,7 +91,13 @@ def worth_asking(line: str) -> bool:
     # month" is the whole point of show_stat.
     if any(c.isdigit() for c in t):
         return len(words) >= 2
-    return len(t) >= MIN_CHARS and len(words) >= 4
+    if len(t) < MIN_CHARS or len(words) < 4:
+        return False
+    # A line that is all grammar and no subject cannot become a visual anyone can
+    # read from ten metres. Contractions have to be reduced first or the stop list
+    # misses them: "that's" and "I'm" are the same non-words as "that" and "I".
+    content = [w for w in (_stem(x) for x in words) if w and w not in _EMPTY]
+    return len(content) >= MIN_CONTENT_WORDS
 WINDOW = 14              # recent lines handed over verbatim
 REPROBE_S = 45.0         # how often to try to climb back to the primary model
 # A model that answers in 25 s is not "available" for this product — the visual has
@@ -215,12 +259,21 @@ class Brain:
         import server                                # local: avoids a cycle
         server.push_mics()
 
-    def feed(self, text: str) -> None:
-        """Transcript fragment from the ear.
+    def feed(self, text: str, complete: bool = False,
+             refine: bool = False) -> None:
+        """A line from the ear.
 
-        The Live API interleaves incremental fragments with cumulative re-sends of
-        the same turn, so the same words arrive more than once. Feeding those
-        through would have the brain redraw what it just drew.
+        `complete=True` means the caller already knows this is a whole utterance —
+        the local ear does, because it owns the sentence boundary. Those go straight
+        out with no debounce; waiting again would just be latency.
+
+        `refine=True` means a speculative visual for this utterance is already on
+        screen and this is the better version of it, so the write is allowed past
+        the per-key cooldown and the form lock.
+
+        Everything else is a --live fragment: the Live API interleaves incremental
+        fragments with cumulative re-sends of the same turn, so the same words
+        arrive more than once and have to settle before we act.
         """
         if not self.enabled or not runtime.listening():
             return
@@ -228,8 +281,24 @@ class Brain:
         if not t or t in self._seen[-400:]:
             return
         self._seen = (self._seen + " " + t)[-2000:]
+        if complete:
+            self._submit(t, refine=refine)
+            return
         self._buf += text
         self._last = time.time()
+
+    def _submit(self, line: str, refine: bool = False) -> None:
+        """Gate locally, then fire and forget. A slow decision must never hold up
+        the sentence spoken after it."""
+        if not worth_asking(line):
+            self.skipped += 1
+            return
+        if self._inflight >= MAX_INFLIGHT:
+            self.dropped += 1
+            return
+        t = asyncio.create_task(self._guarded(line, refine=refine))
+        self._tasks.add(t)
+        t.add_done_callback(self._tasks.discard)
 
     def set_speaker(self, label: str) -> None:
         self.speaker = label
@@ -245,19 +314,13 @@ class Brain:
             if self._inflight >= MAX_INFLIGHT:
                 continue
             line, self._buf = self._buf.strip(), ""
-            if not worth_asking(line):
-                self.skipped += 1
-                continue
-            # Fire and forget: a slow decision must never hold up the next
-            # sentence, or one bad call stalls the whole board.
-            t = asyncio.create_task(self._guarded(line))
-            self._tasks.add(t)
-            t.add_done_callback(self._tasks.discard)
+            self._submit(line)
 
-    async def _guarded(self, line: str) -> None:
+    async def _guarded(self, line: str, refine: bool = False) -> None:
         self._inflight += 1
         try:
-            await asyncio.wait_for(self._consider(line), timeout=DEADLINE_S)
+            await asyncio.wait_for(self._consider(line, refine=refine),
+                                   timeout=DEADLINE_S)
         except asyncio.TimeoutError:
             self.dropped += 1
             print(f"[brain] missed the moment (>{DEADLINE_S}s) — {line[:50]!r}")
@@ -293,7 +356,7 @@ class Brain:
         import server
         server.push_mics()
 
-    async def _consider(self, line: str) -> None:
+    async def _consider(self, line: str, refine: bool = False) -> None:
         tagged = f"{self.speaker}: {line}" if self.speaker else line
         self.recent.append(tagged)
         del self.recent[:-WINDOW]
@@ -325,8 +388,15 @@ class Brain:
             f"{canvas.manifest_text()}\n\n"
             f"RECENT LINES:\n" + "\n".join(self.recent[:-1]) +
             f"\n\nTHE LINE JUST SPOKEN:\n{tagged}\n\n"
-            "Read the new line against the record and the canvas. Grow what is "
-            "already there if it belongs to the same topic. Call one tool, or none."
+            "Read the new line against the record and the canvas.\n"
+            "Decide in this order:\n"
+            "1. Is this already on the canvas or in the record? Then CALL NOTHING.\n"
+            "2. Does it carry a claim, a number, a system, a comparison or a place "
+            "worth anchoring for the rest of the talk? If not, CALL NOTHING.\n"
+            "3. Only if it does: one call. Same key to grow an existing topic, a "
+            "new key for a genuinely new subject.\n"
+            "Calling nothing is the most common correct answer and costs you "
+            "nothing. Do not narrate the talk."
         )
         t0 = time.time()
         self.broadcast(ops.status("thinking", line))
@@ -363,10 +433,12 @@ class Brain:
 
         self.broadcast(ops.status("drawing"))
         for fc in fcs[:1]:                      # one visual per line, hard limit
-            frames, result = tools.dispatch(fc.name, dict(fc.args or {}))
+            frames, result = tools.dispatch(fc.name, dict(fc.args or {}),
+                                            refine=refine)
             self.calls += 1
             _a = fc.args or {}
-            print(f"[brain] {time.time()-t0:.2f}s {fc.name} "
+            print(f"[brain] {time.time()-t0:.2f}s{' refine' if refine else ''} "
+                  f"{fc.name} "
                   f"key={_a.get('key')}"
                   + (f" revises={_a.get('revises')}" if _a.get("revises") else "")
                   + " -> "

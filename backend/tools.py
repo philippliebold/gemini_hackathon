@@ -14,6 +14,7 @@ from typing import Any
 
 import asyncio
 import base64
+import time
 
 import canvas
 import ops
@@ -22,6 +23,14 @@ from config import CFG
 # Set once by main.py so slow tools (image generation) can push a second
 # frame when their result lands. Without it they simply stay a placeholder.
 BROADCAST = None
+
+# True only for the duration of a REFINING dispatch: the second, better call for an
+# utterance whose speculative visual is already on screen. Refinement is the whole
+# point of drawing early, so it is allowed past the per-key cooldown and the form
+# lock — both of which exist to stop the model thrashing, not to stop us improving
+# a block we deliberately drew ahead of time. Set and cleared inside dispatch(),
+# which never awaits, so it cannot interleave with another call.
+_REFINE = False
 
 
 async def _generate_image(block_id: str, prompt: str) -> None:
@@ -196,8 +205,11 @@ DECLARATIONS: list[dict[str, Any]] = [
     _decl(
         "show_summary",
         "The closing recap: every important point of the session on ONE screen. Call "
-        "this ONLY when the speaker signals the end -- 'to sum up', 'in summary', "
-        "'so that's it', 'to wrap up'. Draw 4-9 items from what was ACTUALLY said "
+        "this ONLY when the speaker is explicitly closing the whole talk -- 'to sum "
+        "up', 'in summary', 'in conclusion', 'to wrap up', 'thanks for listening'. "
+        "NOT on 'so that's it' or 'that's that' or 'anyway' -- those are ordinary "
+        "mid-talk filler and firing on them puts the ending on screen while the talk "
+        "is still going. Draw 4-9 items from what was ACTUALLY said "
         "earlier in the talk; never invent a point that was not made.",
         {
             "title": {"type": "string", "description": "e.g. 'In summary'"},
@@ -378,6 +390,18 @@ def _emit(type_: str, key: str, data: dict, revises: str | None = None,
     # A brand new block is created by: an unseen key, an explicit `revises`, or a
     # known key arriving with a different block type (which branches). All three
     # need the full payload — only a same-type update may be partial.
+    # A topic that is already on screen in one shape keeps it. Swapping the shape
+    # replaces the block, so the audience sees the card destroyed and rebuilt as
+    # something else — and the model does this constantly when it cannot settle on
+    # a form. Refusing is better than thrashing, and saying why lets it recover.
+    if (existing is not None and existing.type != type_ and not revises
+            and not _REFINE
+            and time.time() - existing.touched < canvas.FORM_LOCK_S):
+        return [], {"skipped": "form locked",
+                    "reason": f"'{key}' is already a {existing.type} on screen. "
+                              f"Grow it with the same tool you used before, or pick "
+                              f"a NEW key if this is a new subject.",
+                    "canvas": canvas.manifest()}
     if revises or existing is None or existing.type != type_:
         missing = [f for f in needs if not data.get(f)]
         if missing:
@@ -575,12 +599,18 @@ def tool_show_summary(key: str = "summary", title: str | None = None,
                  revises, needs=("items",), w=1200, h=620, enter="fade")
 
 
-def dispatch(name: str, args: dict) -> tuple[list[dict], dict]:
+def dispatch(name: str, args: dict, refine: bool = False) -> tuple[list[dict], dict]:
     """Run a tool call. Never raises — a bad call must not kill the session.
 
     Every result carries the canvas manifest back to the model. That round trip is
     what stops it duplicating a topic it already drew, and it costs no extra API call.
+
+    `refine=True` is the second call for one utterance, replacing a visual we put up
+    speculatively while the speaker was still talking. It bypasses the cooldown and
+    the form lock, because those guard against thrash and this is the opposite:
+    the promised improvement on a block we drew early on purpose.
     """
+    global _REFINE
     fn = globals().get(f"tool_{name}")
     if fn is None:
         return [], {"error": f"unknown tool {name}", "canvas": canvas.manifest()}
@@ -599,13 +629,17 @@ def dispatch(name: str, args: dict) -> tuple[list[dict], dict]:
                 # contradicting ('pricing-revised' -> 'pricing'). Keep the branch and
                 # give it a distinct key rather than silently dropping the tension.
                 args["key"] = f"{args['key']}-alt"
-        if not args.get("revises") and not canvas.cooldown_ok(args["key"]):
+        if (not refine and not args.get("revises")
+                and not canvas.cooldown_ok(args["key"])):
             return [], {"skipped": "cooldown",
                         "reason": f"'{args['key']}' was just drawn; say something new "
                                   f"or wait before revisiting it",
                         "canvas": canvas.manifest()}
+    _REFINE = refine
     try:
         frames, result = fn(**args)
         return frames, result | {"canvas": canvas.manifest()}
     except Exception as e:  # noqa: BLE001 - on stage, degrade don't die
         return [], {"error": f"{type(e).__name__}: {e}", "canvas": canvas.manifest()}
+    finally:
+        _REFINE = False

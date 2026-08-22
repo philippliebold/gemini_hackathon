@@ -114,8 +114,12 @@ async def main(args):
     # --no-llm swaps in a brain that needs no API at all: pattern matching over
     # the transcript. Worse judgement than the model, but Wikimedia photos and
     # Maps routes need no Gemini quota, so a capped account still gives a talk.
+    # `mem` is not optional in practice: without it the brain judges every line
+    # with no idea what the talk has already established, which is exactly what it
+    # needs in order to stay quiet about a topic already covered. It was omitted
+    # here, so THE RECORD block in brain._consider() was dead code all along.
     brain = (local_brain_mod.LocalBrain(server.broadcast) if args.no_llm
-             else brain_mod.Brain(server.broadcast))
+             else brain_mod.Brain(server.broadcast, mem))
     # Survives every reconnect: holds the Live API resumption handle so a dropped
     # session comes back into the same conversation rather than a blank one.
     session_state: dict = {}

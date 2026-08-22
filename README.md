@@ -121,6 +121,42 @@ Each of these cost a real run to learn. Keep them.
   splitting single thoughts into three), and a guard that drops both artefact
   shapes before they can reach the screen. **The model was never the problem; the
   slicing was.**
+- **Restraint was measured at zero, and a debounce was hiding it.** Over one real
+  session: 62 utterances heard, 51 drawn, **0** decisions to stay quiet — and 18 of
+  those 51 writes were then killed by the per-key cooldown. A mechanical debounce
+  was doing the job judgement should do, which is why the board felt like a
+  transcript. `taste.WHEN` now makes silence the explicit default with concrete
+  negatives, `brain.worth_asking()` counts content words rather than any words, and
+  the brain's prompt asks the question in order (already up there? worth anchoring?
+  only then draw). `worth_asking` is deliberately one pure function of one string —
+  it is the seat a local Gemma salience model drops straight into.
+- **A topic must keep the shape it was given.** The same session had one key cycle
+  `hero -> photo -> concept -> hero -> photo`, 8 type-change replaces in all, so the
+  room watched a card destroyed and rebuilt as something else. `FORM_LOCK` refuses a
+  form change on a recently-touched key and tells the model to grow it or pick a new
+  key instead. Growing and contradicting (`revises`) are unaffected.
+- **Whisper tells you when a thought was cut — we were not listening.** It closes a
+  finished sentence and trails an interrupted one off with an ellipsis. One sentence
+  arrived as four utterances and the brain redrew the same topic four times. The ear
+  now holds an unterminated transcript and lets the speaker finish, with
+  `EAR_MAX` as the backstop. **No model call needed to detect this** — which is why
+  a Gemma pass over the text would have been the wrong tool for this particular job.
+- **Accuracy fixes cost responsiveness, and it has to be measured to be seen.**
+  Holding an unfinished thought until Whisper closed it made transcripts far more
+  coherent and doubled the ear's median wait, 2.6s to 5.0s, with 9 of 31 utterances
+  pinned at the 7s cap. Two lessons. Cap the hold (`EAR_HOLD_MAX`) rather than let
+  it run to `EAR_MAX`. And check the whole chain for waits that are no longer
+  earning anything: the brain's 0.45s debounce exists for the Live API's overlapping
+  fragments, and was re-waiting for a settling the local ear had already done.
+- **Draw from the interim transcript, refine on the final.** The perceived-latency
+  win is not a faster model, it is starting earlier. The interim already existed for
+  the caption ticker; handing it to the brain too puts a visual up **mid-sentence**
+  (~0.9s from the first word) and the finished sentence then refines that same block
+  in place. Same two-phase trick `show_image`/`show_route` use for slow assets,
+  applied to the decision. Refinement must bypass the per-key cooldown and the form
+  lock — verified, without that the second call returns `cooldown` and the
+  speculative placeholder is what the room keeps looking at. `EAR_SPECULATE=0` if
+  the visible corrections read as glitchy rather than alive.
 - **A stopped mic must cancel in-flight work, not just refuse new work.** A request
   issued a moment before you hit Stop still completes, still bills and still draws.
   `runtime.LISTENING` gates every caller and `Brain.abort()` cancels what is already
