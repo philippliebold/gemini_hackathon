@@ -33,15 +33,22 @@ const dock = {
 };
 
 /* --- auto-hide: the presenter faces the room, so chrome shouldn't linger --- */
-let hideTimer;
+let hideTimer, stirTimer;
 function poke() {
   dock.root.classList.remove("hidden");
   clearTimeout(hideTimer);
   hideTimer = setTimeout(() => {
     if (!dock.picker.classList.contains("on")) dock.root.classList.add("hidden");
   }, 3000);
+
+  /* `stirring` means someone is at the machine. It is what surfaces the
+     reveal button while the controls are hidden. */
+  document.body.classList.add("stirring");
+  clearTimeout(stirTimer);
+  stirTimer = setTimeout(() => document.body.classList.remove("stirring"), 2600);
 }
-["mousemove", "keydown", "touchstart"].forEach((e) => addEventListener(e, poke));
+["mousemove", "keydown", "touchstart", "wheel"].forEach((e) =>
+  addEventListener(e, poke, { passive: true }));
 poke();
 
 /* --- backend state ------------------------------------------------------
@@ -220,6 +227,9 @@ function setClean(on) {
     dock.hide.classList.toggle("on", on);
   }
 }
+
+dock.reveal = document.getElementById("reveal");
+if (dock.reveal) dock.reveal.onclick = () => { setClean(false); poke(); };
 
 if (dock.full) dock.full.onclick = () => setFullscreen(!document.fullscreenElement);
 if (dock.hide) dock.hide.onclick = () => setClean(!document.body.classList.contains("clean"));

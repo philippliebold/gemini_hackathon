@@ -56,6 +56,7 @@ html, body {
   position: absolute; display: block; border-radius: 50%;
   filter: blur(90px); opacity: .5;
   will-change: transform;
+  transform: translateZ(0);   /* keep the blobs on the GPU */
 }
 #sky b:nth-child(1) { width: 46vw; height: 46vw; left: -8vw;  top: -12vw;
   background: #1E5BC6; animation: drift1 26s var(--ease-io) infinite alternate; }
@@ -380,3 +381,47 @@ body.clean #hud, body.clean #dock, body.clean .cam-wrap { opacity: 0; pointer-ev
 
 /* ── Bolder headings (you liked the bracket weight) ─────────────────── */
 .t-hero { font-weight: 600; }
+
+/* ── Motion polish ──────────────────────────────────────────────────────
+   One easing family everywhere, short durations, and nothing that moves
+   more than it needs to. The room should notice the change, not the
+   animation doing it. */
+
+/* The caption ticker used to snap between transcripts. */
+#caption {
+  transition: opacity .35s var(--ease-out);
+}
+#hud { transition: opacity .5s var(--ease-out); }
+
+/* Kicker and sub-line arrive just behind the headline rather than with it,
+   so a scene reads top-to-bottom the way it is spoken. */
+.t-kicker { animation: rise .6s var(--ease-out) .08s both; }
+.t-sub    { animation: rise .6s var(--ease-out) .30s both; }
+@keyframes rise { from { opacity: 0; transform: translateY(10px) } }
+
+/* Structured content settles a beat after its label. */
+.glass { animation: settle .7s var(--ease-out) .16s both; }
+@keyframes settle {
+  from { opacity: 0; transform: translateY(16px) scale(.985) }
+}
+
+/* Media eases in rather than popping. */
+.shot { animation: settle .8s var(--ease-out) .12s both; }
+.shot img { animation: shot-in 1.2s var(--ease-out) both; }
+
+/* The caption over a photo comes last. */
+.shot .cap { animation: rise .6s var(--ease-out) .5s both; }
+
+/* Bars/lines in a chart already animate via ECharts; keep the panel still
+   underneath so the two do not fight. */
+.glass:has(.echart-slot) { animation-duration: .55s; }
+
+/* Respect a viewer who has asked for less movement. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+  #sky b { animation: none !important; }
+}
