@@ -1,0 +1,47 @@
+:root { --ease: cubic-bezier(.22,1,.36,1); }
+
+#world { transition: transform .6s var(--ease); }
+#world.dragging { transition: none; }
+
+.block {
+  position: absolute;
+  border-radius: 18px;
+  background: #14141b;
+  border: 1px solid #24242f;
+  box-shadow: 0 24px 60px -20px rgba(0,0,0,.9);
+  padding: 22px 24px;
+  transition: transform .6s var(--ease), opacity .4s ease, width .4s var(--ease);
+}
+
+/* enter animations */
+.enter-pop  { animation: pop .45s var(--ease) both; }
+.enter-fade { animation: fade .6s ease both; }
+.enter-draw { animation: draw .7s var(--ease) both; }
+
+@keyframes pop  { from { opacity:0; transform:scale(.86) translateY(14px) } }
+@keyframes fade { from { opacity:0 } }
+@keyframes draw { from { opacity:0; clip-path: inset(0 100% 0 0) }
+                  to   { opacity:1; clip-path: inset(0 0 0 0) } }
+
+.block-title {
+  font-size: 12px; letter-spacing: .12em; text-transform: uppercase;
+  color: #6b6b7b; margin-bottom: 12px;
+}
+
+.accent-violet  { border-color:#4c1d95; box-shadow:0 0 0 1px #4c1d9540, 0 24px 60px -20px #000 }
+.accent-amber   { border-color:#78350f }
+.accent-emerald { border-color:#064e3b }
+.accent-rose    { border-color:#881337 }
+.accent-slate   { border-color:#24242f }
+
+.shimmer {
+  background: linear-gradient(100deg,#16161f 30%,#22222e 50%,#16161f 70%);
+  background-size: 200% 100%;
+  animation: sh 1.4s linear infinite;
+}
+@keyframes sh { to { background-position: -200% 0 } }
+
+#links path { stroke:#3a3a4a; stroke-width:2; fill:none; }
+#links text { fill:#5a5a6a; font-size:11px; font-family:ui-monospace,monospace; }
+
+.mermaid svg { max-width:100%; height:auto; }

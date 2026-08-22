@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Co-Presenter</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+  mermaid.initialize({ startOnLoad: false, theme: "dark",
+                       securityLevel: "loose", fontFamily: "inherit" });
+  window.mermaid = mermaid;
+  window.dispatchEvent(new Event("mermaid-ready"));
+</script>
+<link rel="stylesheet" href="./styles.css">
+</head>
+<body class="bg-[#0b0b0f] text-zinc-100 overflow-hidden h-screen w-screen">
+
+  <!-- camera-transformed world -->
+  <div id="viewport" class="absolute inset-0">
+    <div id="world" class="absolute left-1/2 top-1/2 will-change-transform">
+      <svg id="links" class="absolute overflow-visible pointer-events-none"
+           style="left:0;top:0;width:1px;height:1px"></svg>
+      <div id="blocks" class="absolute" style="left:0;top:0"></div>
+    </div>
+  </div>
+
+  <!-- empty state -->
+  <div id="empty" class="absolute inset-0 grid place-items-center pointer-events-none">
+    <p class="text-zinc-700 text-sm tracking-widest uppercase">listening</p>
+  </div>
+
+  <!-- status chip -->
+  <div id="status" class="absolute bottom-6 left-6 flex items-center gap-2 text-xs
+                          text-zinc-500 font-mono">
+    <span id="dot" class="w-2 h-2 rounded-full bg-zinc-700"></span>
+    <span id="state">connecting</span>
+    <span id="transcript" class="text-zinc-700 max-w-[46ch] truncate"></span>
+  </div>
+
+  <div class="absolute bottom-6 right-6 text-[10px] text-zinc-800 font-mono">
+    scroll zoom · drag pan · F fit · C clear
+  </div>
+
+  <script src="./blocks.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>

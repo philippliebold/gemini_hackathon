@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://copresenter.local/schema/v1",
+  "title": "Co-Presenter canvas op v1",
+  "type": "object",
+  "required": ["v", "seq", "ts", "op", "payload"],
+  "properties": {
+    "v": { "const": 1 },
+    "seq": { "type": "integer", "minimum": 1 },
+    "ts": { "type": "number" },
+    "op": {
+      "enum": ["block.add", "block.update", "block.remove",
+               "link.add", "link.remove",
+               "canvas.focus", "canvas.clear", "status"]
+    },
+    "payload": { "type": "object" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "op": { "const": "block.add" } } },
+      "then": {
+        "properties": {
+          "payload": {
+            "required": ["id", "type", "x", "y", "data"],
+            "properties": {
+              "id": { "type": "string", "pattern": "^b_" },
+              "type": { "enum": ["text", "stat", "diagram", "chart", "table", "image", "map", "code"] },
+              "x": { "type": "number" },
+              "y": { "type": "number" },
+              "w": { "type": "number" },
+              "h": { "type": "number" },
+              "enter": { "enum": ["pop", "fade", "draw"] },
+              "data": { "type": "object" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "op": { "const": "status" } } },
+      "then": {
+        "properties": {
+          "payload": {
+            "required": ["state"],
+            "properties": {
+              "state": { "enum": ["idle", "listening", "thinking", "drawing", "error"] },
+              "transcript": { "type": "string" }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

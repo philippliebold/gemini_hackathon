@@ -1,0 +1,16 @@
+{"delay":0.0,"op":"canvas.clear","payload":{}}
+{"delay":0.5,"op":"status","payload":{"state":"listening"}}
+{"delay":2.0,"op":"status","payload":{"state":"thinking","transcript":"nobody wants to build slides for a ten minute brainstorm"}}
+{"delay":0.9,"op":"block.add","payload":{"id":"b_1","type":"text","x":-720,"y":-180,"w":420,"h":260,"enter":"pop","data":{"title":"Nobody builds slides for a 10-minute talk","bullets":["Decks are slow to make","They lock the talk into a script","The screen is dead weight"],"accent":"slate"}}}
+{"delay":1.6,"op":"status","payload":{"state":"listening"}}
+{"delay":1.2,"op":"block.add","payload":{"id":"b_2","type":"diagram","x":-40,"y":-180,"w":560,"h":320,"enter":"draw","data":{"title":"The loop","mermaid":"graph LR\n  M[mic] --> G[Gemini Live]\n  C[camera] --> G\n  G --> O[canvas ops]\n  G --> T[tool calls]\n  O --> S[screen]\n  T --> S"}}}
+{"delay":0.4,"op":"link.add","payload":{"id":"l_1","from":"b_1","to":"b_2","label":"so instead","style":"arrow"}}
+{"delay":2.2,"op":"status","payload":{"state":"thinking","transcript":"we get from a sentence to pixels in about one and a half seconds"}}
+{"delay":0.8,"op":"block.add","payload":{"id":"b_3","type":"stat","x":640,"y":-180,"w":320,"h":200,"enter":"pop","data":{"value":"1.4s","label":"sentence to pixels","delta":"target < 2s"}}}
+{"delay":1.9,"op":"block.add","payload":{"id":"b_4","type":"chart","x":-720,"y":180,"w":460,"h":300,"enter":"fade","data":{"title":"Where the time goes","kind":"bar","unit":"ms","series":[{"label":"capture","value":40},{"label":"model","value":900},{"label":"ws","value":30},{"label":"render","value":150}]}}}
+{"delay":2.4,"op":"block.add","payload":{"id":"b_5","type":"table","x":-40,"y":180,"w":460,"h":260,"enter":"fade","data":{"title":"Deck vs. co-presenter","columns":["","Deck","Co-Presenter"],"rows":[["prep time","2 hours","0"],["adapts live","no","yes"],["handles a heckle","no","yes"]]}}}
+{"delay":2.8,"op":"status","payload":{"state":"drawing","transcript":"I'm at NG Greenhouse and I want to get to Luckin Coffee"}}
+{"delay":1.1,"op":"block.add","payload":{"id":"b_6","type":"map","x":640,"y":180,"w":420,"h":320,"enter":"pop","data":{"from":"NG Greenhouse","to":"Luckin Coffee","mode":"walking","duration":"8 min","distance":"650 m","polyline":[[0,0],[30,60],[80,70],[120,140],[190,160]]}}}
+{"delay":1.5,"op":"canvas.focus","payload":{"ids":[],"padding":80}}
+{"delay":2.0,"op":"block.add","payload":{"id":"b_7","type":"code","x":-40,"y":560,"w":520,"h":220,"enter":"fade","data":{"lang":"python","title":"the whole ear","source":"async with client.aio.live.connect(model=M, config=cfg) as s:\n    await s.send_realtime_input(audio=Blob(data=chunk, mime_type=\"audio/pcm;rate=16000\"))\n    async for r in s.receive():\n        if r.tool_call:\n            emit(r.tool_call)"}}}
+{"delay":1.4,"op":"status","payload":{"state":"listening"}}
