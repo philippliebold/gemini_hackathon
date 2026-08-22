@@ -72,7 +72,12 @@ speaker explicitly links them. Never guess an id.
 
 def build_config(handle: str | None = None) -> types.LiveConnectConfig:
     return types.LiveConnectConfig(
-        response_modalities=["TEXT"],           # we want tool calls, not speech
+        # gemini-3.1-flash-live-preview REJECTS ["TEXT"] with a 1007 close:
+        # "requested combination of response modalities (TEXT) is not supported".
+        # AUDIO is the only modality it accepts. Tool calls still arrive normally
+        # (verified live) -- we simply drop the audio bytes and never play them,
+        # so the co-presenter stays silent as designed.
+        response_modalities=["AUDIO"],
         system_instruction=types.Content(
             parts=[types.Part(text=SYSTEM_INSTRUCTION)]
         ),
