@@ -130,13 +130,13 @@ html, body {
 .t-kicker {
   font-family: var(--font-body);
   font-size: clamp(11px, .95vw, 17px);
-  letter-spacing: .30em; text-transform: uppercase;
-  color: var(--on-lo); margin-bottom: 1.6vh;
-  display: flex; align-items: center; gap: .8em;
+  letter-spacing: .18em; text-transform: uppercase; font-weight: 500;
+  color: var(--on-mid); margin-bottom: 1.8vh;
+  display: flex; align-items: center; gap: .75em;
 }
 .t-kicker::before {
-  content: ""; width: 2.4em; height: 2px; background: var(--accent, var(--g-blue));
-  border-radius: 2px;
+  content: ""; width: .42em; height: .42em; border-radius: 50%;
+  background: var(--accent, var(--g-blue)); flex: none; opacity: .9;
 }
 
 /* the hero line: enormous, light, gradient-filled */
@@ -223,7 +223,7 @@ html, body {
   border-radius: 26px;
   backdrop-filter: blur(24px) saturate(150%);
   -webkit-backdrop-filter: blur(24px) saturate(150%);
-  box-shadow: 0 30px 90px -30px rgba(0,0,0,.75), inset 0 1px 0 rgba(255,255,255,.14);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.10);
   padding: clamp(20px, 2.4vw, 40px);
   width: 100%; max-width: min(1100px, 82vw); margin-inline: auto;
 }
@@ -234,7 +234,7 @@ html, body {
   position: relative; width: 100%; border-radius: 26px; overflow: hidden;
   max-height: 74vh;
   display: block;
-  box-shadow: 0 40px 110px -32px rgba(0,0,0,.85);
+  box-shadow: none;
   background: rgba(255,255,255,.05);
 }
 /* height:100% inside an auto-height flex container resolves to 0 and the
@@ -246,10 +246,12 @@ html, body {
 .shot img[data-broken] { display: none; }
 .shot img { animation: shot-in 1.5s var(--ease-out) both; }
 @keyframes shot-in { from { opacity: 0; transform: scale(1.07) } }
-/* a soft vignette so text over/near it stays readable */
-.shot::after {
-  content: ""; position: absolute; inset: 0; pointer-events: none;
-  background: linear-gradient(to top, rgba(6,18,38,.55), transparent 46%);
+/* Only darken behind an actual caption — a blanket vignette made every
+   photo look like it had a smudge across the bottom. */
+.shot:has(.cap)::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 34%;
+  pointer-events: none;
+  background: linear-gradient(to top, rgba(6,18,38,.72), transparent);
 }
 .scene:has(> .shot) { align-items: center; }
 .shot .cap {
@@ -360,7 +362,7 @@ body.clean #hud, body.clean #dock, body.clean .cam-wrap { opacity: 0; pointer-ev
   border: 1px solid rgba(255,255,255,.14);
   backdrop-filter: blur(18px) saturate(150%);
   -webkit-backdrop-filter: blur(18px) saturate(150%);
-  box-shadow: 0 18px 50px -22px rgba(0,0,0,.7);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.08);
   animation: tile-in .8s var(--ease-out) both;
 }
 @keyframes tile-in {

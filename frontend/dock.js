@@ -193,14 +193,42 @@ addEventListener("keydown", (e) => {
     setStage(!document.body.classList.contains("stage"));
 });
 
-/* hide-everything button: strips the dock, hud and preview. Just the scenes. */
-dock.stageBtn = document.getElementById("stage-btn");
-if (dock.stageBtn) dock.stageBtn.onclick = () => {
-  const on = !document.body.classList.contains("clean");
-  document.body.classList.toggle("clean", on);
-  dock.stageBtn.querySelector(".msym").textContent =
-    on ? "fullscreen_exit" : "fullscreen";
-  if (on && document.documentElement.requestFullscreen)
-    document.documentElement.requestFullscreen().catch(() => {});
+/* Fullscreen and hide-controls are separate on purpose: you often want the
+   projector filling the screen while you still reach the mic buttons. */
+dock.full = document.getElementById("full-btn");
+dock.hide = document.getElementById("hide-btn");
+
+function setFullscreen(on) {
+  const el = document.documentElement;
+  if (on && el.requestFullscreen) el.requestFullscreen().catch(() => {});
   else if (!on && document.fullscreenElement) document.exitFullscreen().catch(() => {});
-};
+}
+
+function syncFullIcon() {
+  if (!dock.full) return;
+  dock.full.querySelector(".msym").textContent =
+    document.fullscreenElement ? "fullscreen_exit" : "fullscreen";
+  dock.full.classList.toggle("on", !!document.fullscreenElement);
+}
+
+/* `clean` hides every affordance. H is the documented way back -- the dock
+   cannot show a button to un-hide itself. */
+function setClean(on) {
+  document.body.classList.toggle("clean", on);
+  if (dock.hide) {
+    dock.hide.querySelector(".msym").textContent = on ? "visibility" : "visibility_off";
+    dock.hide.classList.toggle("on", on);
+  }
+}
+
+if (dock.full) dock.full.onclick = () => setFullscreen(!document.fullscreenElement);
+if (dock.hide) dock.hide.onclick = () => setClean(!document.body.classList.contains("clean"));
+addEventListener("fullscreenchange", syncFullIcon);
+
+addEventListener("keydown", (e) => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key.toLowerCase();
+  if (k === "f") setFullscreen(!document.fullscreenElement);
+  if (k === "h") setClean(!document.body.classList.contains("clean"));
+  if (e.key === "Escape") setClean(false);
+});

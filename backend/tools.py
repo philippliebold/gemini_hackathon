@@ -519,7 +519,7 @@ async def _find_photo(block_id: str, query: str) -> None:
 
         for pg in sorted(pages, key=lambda x: x.get("index", 99)):
             info = (pg.get("imageinfo") or [{}])[0]
-            thumb = info.get("thumburl") or ""
+            thumb = (info.get("thumburl") or "").split("?")[0]
             if not thumb.lower().split("?")[0].endswith((".jpg", ".jpeg", ".png")):
                 continue
             meta = info.get("extmetadata") or {}

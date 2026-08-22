@@ -460,7 +460,8 @@ window.sendPresenter = (action) => {
 addEventListener("keydown", (e) => {
   const k = e.key.toLowerCase();
   if (k === "c") { clearAll(); window.sendPresenter("clear"); }
-  if (k === "h") document.body.classList.toggle("clean");
+  /* 'h' (hide) and 'f' (fullscreen) live in dock.js -- binding them here too
+     would toggle twice and cancel out. */
 });
 
 window.CoStage = { addScene, updateScene, retire, clearAll, focusScene, live };
