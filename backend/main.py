@@ -1,13 +1,13 @@
 """The real thing: mics -> Gemini Live -> WebSocket.
 
-    python backend/main.py                  # Mac mic + phones
+    python backend/main.py                  # local Whisper ear + Gemini brain (default)
+    python backend/main.py --live           # Gemini Live API as the ear instead
     python backend/main.py --devices        # list input devices, then exit
     python backend/main.py --device 2       # pick the Mac's input
     python backend/main.py --phones-only    # only phone mics, ignore the Mac's
     python backend/main.py --no-phones      # only the Mac's mic
     python backend/main.py --pcm talk.pcm   # replay a recording (add MANUAL_ACTIVITY=1)
     python backend/main.py --brain          # 3.7-flash decides instead of the ear
-    python backend/main.py --local          # local Whisper ear + 3.7-flash brain
     python backend/main.py --local --no-llm # fully offline: Whisper ear + no API
 
 Up to four phones can join at the printed https:// URL. See MICS.md.
@@ -150,7 +150,7 @@ async def main(args):
     })
     server.CONTROL["qr_svg"] = qr_svg(server.CONTROL["join_url"])
 
-    if args.local:
+    if not args.live:
         # Local ears own transcription; nothing connects to the Live API at all, so
         # no turn-taking, no VAD guessing, no keepalive drops. The brain is the only
         # thing that can draw, so it is on by definition.
@@ -209,9 +209,13 @@ if __name__ == "__main__":
                    help="don't run the phone-mic server")
     p.add_argument("--phones-only", action="store_true",
                    help="ignore the Mac's own mic; phones only")
+    p.add_argument("--live", action="store_true",
+                   help="use the Gemini Live API as the ear instead of local Whisper. "
+                        "Measured WORSE on the same audio (0 transcripts vs 8): the "
+                        "model guesses when you stopped speaking and is often wrong. "
+                        "Kept for the 'audio straight into Gemini' story.")
     p.add_argument("--local", action="store_true",
-                   help="transcribe locally with Whisper instead of the Live API: "
-                        "continuous, no turn detection, audio never leaves the Mac")
+                   help="(default; accepted for compatibility)")
     p.add_argument("--no-llm", action="store_true",
                    help="decide what to draw with local pattern matching instead "
                         "of Gemini — works with no API quota at all")
