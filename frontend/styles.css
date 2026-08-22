@@ -176,3 +176,18 @@ html, body {
 .speaker-2 { --speaker: var(--g-red);    }
 .speaker-3 { --speaker: var(--g-yellow); }
 .speaker-4 { --speaker: var(--g-green);  }
+
+/* ── Icons: Material Symbols Rounded ────────────────────────────────────
+   Google's own set. The variable FILL axis animates 0→1, which is the
+   native Material way to show a block becoming active — no second asset. */
+.msym {
+  font-family: "Material Symbols Rounded";
+  font-weight: normal; font-style: normal;
+  line-height: 1; letter-spacing: normal; text-transform: none;
+  display: inline-block; white-space: nowrap; word-wrap: normal;
+  direction: ltr; -webkit-font-feature-settings: "liga";
+  -webkit-font-smoothing: antialiased;
+  font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
+  transition: font-variation-settings .45s var(--ease);
+}
+.block.is-focus .msym { font-variation-settings: "FILL" 1, "wght" 500, "GRAD" 0, "opsz" 24; }

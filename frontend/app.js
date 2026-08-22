@@ -63,6 +63,7 @@ function addBlock(p) {
   els.blocks.appendChild(el);
   state.blocks.set(p.id, { payload: p, el });
   if (p.type === "diagram") window.CoPresenterBlocks.hydrateMermaid(el);
+  if (p.type === "chart") window.CoPresenterBlocks.hydrateCharts(el);
   els.empty.style.opacity = "0";
   requestAnimationFrame(drawLinks);
 }
@@ -78,8 +79,45 @@ function updateBlock(p) {
   if (p.data) {
     b.el.innerHTML = window.CoPresenterBlocks.renderBlock(b.payload.type, b.payload.data);
     if (b.payload.type === "diagram") window.CoPresenterBlocks.hydrateMermaid(b.el);
+    if (b.payload.type === "chart") window.CoPresenterBlocks.hydrateCharts(b.el);
   }
   drawLinks();
+}
+
+/* Move blocks to new positions as one choreographed motion instead of a jump.
+   The audience is watching the screen with nobody narrating it, so a reflow
+   has to read as intentional. GSAP Flip measures before/after and tweens the
+   delta; without it, re-layout looks like the page broke. */
+function reflow(moves) {
+  const els = moves.map((m) => state.blocks.get(m.id)).filter(Boolean).map((b) => b.el);
+  const useFlip = window.Flip && els.length;
+  const st = useFlip ? Flip.getState(els) : null;
+
+  for (const m of moves) {
+    const b = state.blocks.get(m.id);
+    if (!b) continue;
+    if (m.x != null) b.payload.x = m.x;
+    if (m.y != null) b.payload.y = m.y;
+    b.el.style.left = `${b.payload.x}px`;
+    b.el.style.top = `${b.payload.y}px`;
+  }
+
+  if (useFlip) {
+    Flip.from(st, {
+      duration: 0.6, ease: "power2.inOut", stagger: 0.03,
+      onUpdate: drawLinks, onComplete: drawLinks,
+    });
+  } else {
+    drawLinks();
+  }
+}
+
+/* One block becomes the subject. Elevation does the pointing, because the
+   presenter is facing the room and cannot point at the screen themselves. */
+function focusBlock(id) {
+  for (const [, b] of state.blocks) b.el.classList.remove("is-focus");
+  const b = state.blocks.get(id);
+  if (b) b.el.classList.add("is-focus");
 }
 
 function removeBlock(id) {
@@ -145,6 +183,8 @@ const OPS = {
   "link.remove": (p) => { state.links.delete(p.id); drawLinks(); },
   "canvas.focus": (p) => fit(p.ids || [], p.padding ?? 80),
   "canvas.clear": clearCanvas,
+  "canvas.reflow": (p) => reflow(p.moves || []),
+  "block.focus": (p) => focusBlock(p.id),
   "status": setStatus,
 };
 

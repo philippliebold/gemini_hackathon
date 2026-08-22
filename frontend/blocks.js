@@ -36,44 +36,12 @@ const RENDER = {
       <pre class="text-[11px] text-[#80868B] font-mono whitespace-pre-wrap">${esc(d.mermaid)}</pre>
     </div>`,
 
-  chart: (d) => {
-    const s = d.series || [];
-    const max = Math.max(1, ...s.map((x) => Number(x.value) || 0));
-    if (d.kind === "pie") {
-      const total = s.reduce((a, b) => a + (Number(b.value) || 0), 0) || 1;
-      let acc = 0;
-      const arcs = s.map((x, i) => {
-        const frac = (Number(x.value) || 0) / total;
-        const seg = `${frac * 100} ${100 - frac * 100}`;
-        const off = 25 - acc * 100;
-        acc += frac;
-        return `<circle r="15.9" cx="21" cy="21" fill="none" stroke-width="9"
-          stroke="${["#4285F4","#EA4335","#FBBC04","#34A853","#5F6368"][i % 5]}"
-          stroke-dasharray="${seg}" stroke-dashoffset="${off}"/>`;
-      }).join("");
-      return `${title(d.title || "chart")}
-        <div class="flex items-center gap-6">
-          <svg viewBox="0 0 42 42" class="w-32 h-32 -rotate-90">${arcs}</svg>
-          <div class="space-y-1 text-sm">${s.map((x, i) => `
-            <div class="flex gap-2 items-center text-[#5F6368]">
-              <span class="w-2 h-2 rounded-full" style="background:${["#4285F4","#EA4335","#FBBC04","#34A853","#5F6368"][i % 5]}"></span>
-              ${esc(x.label)} <span class="text-[#80868B] tabular-nums">${esc(x.value)}</span>
-            </div>`).join("")}</div>
-        </div>`;
-    }
-    return `${title(d.title || "chart")}
-      <div class="space-y-3 mt-1">${s.map((x) => `
-        <div>
-          <div class="flex justify-between text-xs text-[#5F6368] mb-1">
-            <span>${esc(x.label)}</span>
-            <span class="tabular-nums">${esc(x.value)}${esc(d.unit || "")}</span>
-          </div>
-          <div class="h-2.5 rounded-full bg-[#F1F3F4] overflow-hidden">
-            <div class="h-full rounded-full bg-[#4285F4] transition-all duration-700"
-                 style="width:${((Number(x.value) || 0) / max) * 100}%"></div>
-          </div>
-        </div>`).join("")}</div>`;
-  },
+  /* ECharts renders after mount (needs a sized element), so the renderer
+     only emits the host. hydrateCharts() below fills it. */
+  chart: (d) => `
+    ${title(d.title || "chart")}
+    <div class="echart-slot" style="height:${d.h_chart || 260}px"
+         data-spec="${esc(JSON.stringify(d))}"></div>`,
 
   table: (d) => `
     ${title(d.title || "table")}
@@ -140,4 +108,87 @@ async function hydrateMermaid(el) {
   } catch { /* leave the source visible; never blank the screen */ }
 }
 
-window.CoPresenterBlocks = { renderBlock, hydrateMermaid };
+/* ---------- ECharts ---------- */
+/* One theme, registered once. The model never emits colours or fonts —
+   it emits {kind, series}. Everything visual is decided here, so a sloppy
+   spec still lands on-brand. */
+const G4 = ["#4285F4", "#EA4335", "#FBBC04", "#34A853", "#5F6368"];
+let themeReady = false;
+
+function ensureTheme() {
+  if (themeReady || !window.echarts) return themeReady;
+  echarts.registerTheme("gemini", {
+    color: G4,
+    backgroundColor: "transparent",
+    textStyle: { fontFamily: "Roboto, Google Sans, sans-serif",
+                 fontSize: 15, color: "#5F6368" },
+  });
+  themeReady = true;
+  return true;
+}
+
+/* Axis/grid tuned for a projector: no tick marks, faint splitlines,
+   bigger type than the ECharts default (which assumes a laptop). */
+const AXIS = {
+  axisLine: { lineStyle: { color: "#DADCE0" } },
+  axisTick: { show: false },
+  axisLabel: { color: "#5F6368", fontSize: 14 },
+  splitLine: { lineStyle: { color: "#F1F3F4" } },
+};
+const GRID = { left: 4, right: 18, top: 14, bottom: 0, containLabel: true };
+
+function specFor(d) {
+  const s = d.series || [];
+  const labels = s.map((x) => String(x.label ?? ""));
+  const values = s.map((x) => Number(x.value) || 0);
+
+  if (d.kind === "pie" || d.kind === "donut") {
+    return { series: [{
+      type: "pie", radius: ["46%", "72%"], avoidLabelOverlap: true,
+      itemStyle: { borderColor: "#fff", borderWidth: 3 },
+      label: { fontSize: 15, color: "#3C4043" },
+      data: s.map((x) => ({ name: x.label, value: Number(x.value) || 0 })),
+    }] };
+  }
+  if (d.kind === "line" || d.kind === "area") {
+    return {
+      grid: GRID,
+      xAxis: { type: "category", boundaryGap: false, data: labels, ...AXIS },
+      yAxis: { type: "value", ...AXIS },
+      series: [{
+        type: "line", data: values, smooth: true, symbolSize: 9,
+        lineStyle: { width: 4 },
+        areaStyle: { color: "rgba(66,133,244,.12)" },
+      }],
+    };
+  }
+  /* default: horizontal bars — the most legible form from the back of a room */
+  return {
+    grid: GRID,
+    xAxis: { type: "value", ...AXIS },
+    yAxis: { type: "category", data: labels.slice().reverse(), ...AXIS },
+    series: [{
+      type: "bar", data: values.slice().reverse(), barWidth: "55%",
+      itemStyle: { borderRadius: [0, 6, 6, 0] },
+    }],
+  };
+}
+
+function hydrateCharts(root) {
+  if (!ensureTheme()) return;
+  root.querySelectorAll(".echart-slot").forEach((slot) => {
+    if (slot.dataset.done) return;
+    slot.dataset.done = "1";
+    let d = {};
+    try { d = JSON.parse(slot.dataset.spec || "{}"); } catch (e) { /* keep {} */ }
+    try {
+      const chart = echarts.init(slot, "gemini", { renderer: "canvas" });
+      chart.setOption(specFor(d));           // animates in by default
+      slot._chart = chart;
+    } catch (e) {
+      slot.innerHTML = `<div class="text-[#80868B] text-xs">chart unavailable</div>`;
+    }
+  });
+}
+
+window.CoPresenterBlocks = { renderBlock, hydrateMermaid, hydrateCharts };
