@@ -18,6 +18,7 @@ interjection still lands.
 This module is pure logic — no sockets, no audio device. See mic_server.py.
 """
 import itertools
+import os
 import time
 from dataclasses import dataclass, field
 
@@ -26,7 +27,15 @@ import numpy as np
 MAX_MICS = 4
 
 # Tuning. Defaults are for phones held at conversational distance in a loud room.
-GATE_RMS = 0.010        # below this a frame is silence/room noise, not speech
+# Measured in the demo room with nobody talking: p10 0.003, peaks to 0.016. The old
+# 0.010 gate sat inside that, so ambient noise opened turns and the model drew from
+# nothing ("Poking Out Ears").
+#
+# 0.013 is deliberately biased LOW. The two failure modes are not symmetric: a gate
+# that is too low draws on noise, which you can see and fix mid-demo; a gate that is
+# too high hears nothing at all, and looks identical to the model being broken.
+# Calibrate the actual room with `python backend/mic_level.py` and set MIC_GATE.
+GATE_RMS = float(os.getenv("MIC_GATE", "0.013"))
 HANGOVER_S = 0.70       # holder keeps the FLOOR this long after going quiet
 TURN_SILENCE_S = 0.35   # ...but the TURN closes this early. See below.
 STEAL_MARGIN = 1.8      # a rival must be this much louder to interrupt
