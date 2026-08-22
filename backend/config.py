@@ -3,7 +3,10 @@ import os
 from dataclasses import dataclass
 from dotenv import load_dotenv
 
-load_dotenv()
+# override=True on purpose: .env is where this project's config lives, so editing it
+# must take effect. The default leaves a stale shell variable winning silently, which
+# means rotating a key in .env appears to do nothing.
+load_dotenv(override=True)
 
 
 @dataclass(frozen=True)

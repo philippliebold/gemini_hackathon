@@ -89,6 +89,22 @@ CONTENT RULES:
 """
 
 
+def _why(exc: Exception) -> str:
+    """Turn an API failure into something readable from across a room."""
+    m = str(exc)
+    if "spending cap" in m:
+        return "API blocked: billing spend cap reached — ai.studio/billing"
+    if "free_tier" in m or "RESOURCE_EXHAUSTED" in m:
+        return "API blocked: free-tier quota exhausted — wait, or use a funded key"
+    if "429" in m:
+        return "API rate limited — retrying"
+    if "404" in m:
+        return "Model not found — check GEMINI_MODEL in .env"
+    if "PERMISSION" in m or "401" in m or "403" in m:
+        return "API key rejected — check GEMINI_API_KEY in .env"
+    return f"API error: {type(exc).__name__}"
+
+
 class Brain:
     def __init__(self, broadcast: Callable[[dict], None]):
         self.broadcast = broadcast
@@ -226,7 +242,10 @@ class Brain:
             self.broadcast(ops.status("listening"))
         except Exception as e:  # noqa: BLE001 - never take the demo down
             print(f"[brain] {type(e).__name__}: {str(e)[:110]}")
-            self.broadcast(ops.status("listening"))
+            # Say WHY on screen. A blank canvas from an exhausted quota looks
+            # exactly like a blank canvas from a broken pipeline, and that
+            # ambiguity cost real debugging time.
+            self.broadcast(ops.status("error", _why(e)))
         finally:
             self._inflight -= 1
             await self._maybe_reclaim_primary()
