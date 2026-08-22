@@ -24,6 +24,15 @@ KEY_CUTOFF = 0.8        # difflib similarity for collapsing near-duplicate keys
 COOLDOWN_S = 6.0        # per-key debounce; one long sentence must not update thrice
 FOCUS_THROTTLE_S = 3.5  # camera moves per second budget, or the room gets seasick
 
+# These MIRROR frontend/stage.js. The stage retires a scene after LIFETIME with no
+# refresh, and retires the oldest once MAX_LIVE are up. If we do not mirror that, the
+# manifest tells the model that things are on screen which the audience can no longer
+# see — and the whole point of the manifest is that it is the truth. A block.update
+# refreshes the stage's timer, so an actively discussed topic stays alive on both
+# sides. Keep these two numbers in step with stage.js.
+STAGE_LIFETIME_S = 26.0
+STAGE_MAX_LIVE = 3
+
 _COL_PITCH = 1200       # wide enough that a branch never collides with the next column
 _COL_BASE = -220        # centres a standard 440-wide block on the origin
 _ROW_GAP = 40
@@ -71,6 +80,28 @@ def reset() -> None:
     _cluster_col.clear()
     _cluster_bottom.clear()
     _last_focus = 0.0
+
+
+def _forget(bid: str) -> None:
+    """Drop local state for a block the stage has already retired. Emits nothing —
+    the frontend removed it on its own."""
+    b = BLOCKS.pop(bid, None)
+    if b is None:
+        return
+    BY_KEY.pop(b.key, None)
+    for lid in [i for i, l in LINKS.items() if bid in (l["from"], l["to"])]:
+        LINKS.pop(lid, None)
+    if not any(x.cluster == b.cluster for x in BLOCKS.values()):
+        _cluster_bottom.pop(b.cluster, None)
+
+
+def prune() -> None:
+    """Forget what the stage has retired, so the manifest never lies."""
+    now = time.time()
+    keep = [b.id for b in sorted(BLOCKS.values(), key=lambda x: -x.touched)
+            if now - b.touched <= STAGE_LIFETIME_S][:STAGE_MAX_LIVE]
+    for bid in [i for i in list(BLOCKS) if i not in keep]:
+        _forget(bid)
 
 
 # --- keys -------------------------------------------------------------------
@@ -205,6 +236,7 @@ def upsert(type_: str, key: str, data: dict, *, w: int = 440, h: int = 280,
 
     Returns (frames, block_id, action) where action is "add" or "update".
     """
+    prune()
     existing_id = BY_KEY.get(key)
     now = time.time()
 
@@ -285,6 +317,7 @@ def cooldown_ok(key: str, seconds: float | None = None) -> bool:
 
     Reads COOLDOWN_S at call time, not import time, so tests can retune it.
     """
+    prune()
     seconds = COOLDOWN_S if seconds is None else seconds
     bid = BY_KEY.get(key)
     return True if bid is None else (time.time() - BLOCKS[bid].touched) >= seconds
@@ -303,6 +336,7 @@ def _title_for(b: Block) -> str:
 
 def manifest(limit: int = 12) -> list[dict[str, Any]]:
     """What the model is told is on screen. Newest activity first."""
+    prune()
     now = time.time()
     out = []
     for b in sorted(BLOCKS.values(), key=lambda x: -x.touched)[:limit]:

@@ -56,6 +56,8 @@ def ops_of(frames: list[dict]) -> list[str]:
 def scenario(quiet: bool) -> None:
     canvas.reset()
     canvas.COOLDOWN_S = 0.25          # keep the run fast; real default is 6s
+    canvas.STAGE_MAX_LIVE = 99        # these checks are about merge/branch logic;
+    canvas.STAGE_LIFETIME_S = 9e9     # stage retirement is covered separately below
     canvas.FOCUS_THROTTLE_S = 0.0     # assert on writes, not on camera throttling
 
     print("\n\033[1m── 1. a new topic lands once ─────────────────────────\033[0m")
@@ -248,6 +250,7 @@ def reconnect_scenario(quiet: bool) -> None:
 
     canvas.reset()
     canvas.FOCUS_THROTTLE_S = 0.0
+    canvas.STAGE_MAX_LIVE, canvas.STAGE_LIFETIME_S = 99, 9e9
     call("show_stat", key="latency", value="1.4s", label="sentence to pixels")
     call("show_concept", key="deck", title="Decks are dead weight",
          bullets=["slow to make"])
@@ -315,6 +318,36 @@ def reconnect_scenario(quiet: bool) -> None:
           len(canvas.BLOCKS) == 2, f"{len(canvas.BLOCKS)}")
 
 
+def stage_scenario(quiet: bool) -> None:
+    """The stage retires scenes on its own. canvas.py must forget them too, or the
+    manifest tells the model about blocks the room can no longer see."""
+    canvas.reset()
+    canvas.COOLDOWN_S = 0.0
+    canvas.FOCUS_THROTTLE_S = 0.0
+    canvas.STAGE_MAX_LIVE = 3
+    canvas.STAGE_LIFETIME_S = 0.4
+
+    print("\n\033[1m── 15. only MAX_LIVE scenes are reported ────────────\033[0m")
+    # Deliberately unrelated names: 'topic1'/'topic0' score 0.83 on the fuzzy key
+    # match and would legitimately collapse into one block.
+    names = ["pricing", "latency", "hiring", "market", "roadmap"]
+    for n in names:
+        call("show_stat", key=n, value="1", label=n)
+    m = canvas.manifest()
+    check("manifest never claims more than the stage shows", len(m) == 3, str(len(m)))
+    check("it keeps the NEWEST three", [e["key"] for e in m]
+          == names[:1:-1], str([e["key"] for e in m]))
+
+    print("\n\033[1m── 16. a retired topic can be drawn again ───────────\033[0m")
+    time.sleep(0.5)                      # everything ages past STAGE_LIFETIME_S
+    check("nothing is reported as on screen", canvas.manifest() == [],
+          str(canvas.manifest()))
+    f, r = call("show_stat", key="roadmap", value="9", label="roadmap")
+    show("speaker returns to a topic that scrolled off", f, r, quiet)
+    check("it is re-ADDED, not silently updated into a dead block",
+          ops_of(f)[:1] == ["block.add"], str(ops_of(f)))
+
+
 def main() -> int:
     p = argparse.ArgumentParser()
     p.add_argument("--quiet", action="store_true")
@@ -326,6 +359,7 @@ def main() -> int:
         return 0
     scenario(a.quiet)
     reconnect_scenario(a.quiet)
+    stage_scenario(a.quiet)
     print()
     if _fails:
         print(f"\033[31m{len(_fails)} check(s) failed:\033[0m " + "; ".join(_fails))
