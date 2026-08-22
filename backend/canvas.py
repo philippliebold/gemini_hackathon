@@ -20,6 +20,7 @@ import ops
 
 # --- tuning knobs -----------------------------------------------------------
 MAX_BULLETS = 6         # a card may grow past the per-call cap of 4, but not forever
+MAX_BRANCHES = 2        # a subject may hold a disagreement, not an argument
 KEY_CUTOFF = 0.8        # difflib similarity for collapsing near-duplicate keys
 COOLDOWN_S = 6.0        # per-key debounce; one long sentence must not update thrice
 FOCUS_THROTTLE_S = 3.5  # camera moves per second budget, or the room gets seasick
@@ -105,6 +106,13 @@ def prune() -> None:
 
 
 # --- keys -------------------------------------------------------------------
+def key_of_block(ref: str | None) -> str | None:
+    """Map a block id back to its key. The model is told to pass a key but the
+    manifest shows ids too, and it passes `b_2` often enough to matter."""
+    b = BLOCKS.get((ref or "").strip())
+    return b.key if b else None
+
+
 def normalize_key(raw: str | None) -> str:
     """Slugify, then collapse onto an existing near-identical key.
 
@@ -114,6 +122,11 @@ def normalize_key(raw: str | None) -> str:
     slug = re.sub(r"[^a-z0-9.]+", "-", (raw or "").strip().lower()).strip("-.")
     if not slug:
         return "misc"
+    # `.altN` suffixes are OURS: they are how a contradiction gets filed. The model
+    # sees them in the manifest and starts writing to them, which produced chains
+    # like construction.alt2 -> construction.alt4 and a branch on every single line.
+    # Strip it so a caller can only ever name a top-level subject.
+    slug = re.sub(r"\.alt\d+$", "", slug) or "misc"
     if slug in BY_KEY:
         return slug
 
@@ -249,11 +262,19 @@ def upsert(type_: str, key: str, data: dict, *, w: int = 440, h: int = 280,
         return [ops.block_update(b.id, b.data)], b.id, "update"
 
     if existing_id:
-        # same topic, different shape (a stat becomes a chart). Branch rather
-        # than mutate — the frontend cannot change a block's type in place.
-        frames, bid = branch(type_, key, data, revises=key, label="in detail",
-                             w=w, h=h, enter=enter)
-        return frames, bid, "branch"
+        # Same subject, different shape — the speaker moved from a claim to a
+        # number, so the number is now the better way to show it. REPLACE rather
+        # than branch: the stage shows one thing at a time, and branching here
+        # produced a new block on every type change, which was most of them.
+        old = BLOCKS.pop(existing_id)
+        BY_KEY.pop(old.key, None)
+        x, y = old.x, old.y
+        frame = ops.block_add(type_, data, x=x, y=y, w=w, h=h, enter=enter)
+        bid = frame["payload"]["id"]
+        BLOCKS[bid] = Block(id=bid, type=type_, key=key, data=data, x=x, y=y,
+                            w=w, h=h, created=now, touched=now, parent=old.parent)
+        BY_KEY[key] = bid
+        return [ops.block_remove(existing_id), frame], bid, "replace"
 
     x, y = _place(key.split(".")[0], h)
     frame = ops.block_add(type_, data, x=x, y=y, w=w, h=h, enter=enter)
@@ -273,6 +294,16 @@ def branch(type_: str, key: str, data: dict, *, revises: str, label: str | None 
         return frames, bid
 
     parent = BLOCKS[parent_id]
+    # Two views of one subject is tension worth showing; five is noise. Past the cap
+    # we grow the newest branch instead of adding another.
+    siblings = [b for b in BLOCKS.values() if b.parent == parent.key]
+    if len(siblings) >= MAX_BRANCHES:
+        newest = max(siblings, key=lambda b: b.touched)
+        merger = MERGERS.get(type_, _merge_replace)
+        newest.data = merger(newest.data, data)
+        newest.revision += 1
+        newest.touched = time.time()
+        return [ops.block_update(newest.id, newest.data)], newest.id
     alt_key = f"{parent.cluster}.alt{next(_alt_n)}"
     x, y = parent.x + parent.w + _BRANCH_GAP, parent.y
     now = time.time()
@@ -340,10 +371,14 @@ def manifest(limit: int = 12) -> list[dict[str, Any]]:
     now = time.time()
     out = []
     for b in sorted(BLOCKS.values(), key=lambda x: -x.touched)[:limit]:
-        entry = {"id": b.id, "key": b.key, "type": b.type, "title": _title_for(b),
+        # Report a branch under its PARENT subject. Exposing the internal `.altN`
+        # key made the model write straight to it, so every later line landed on the
+        # first subject it ever picked and the whole board collapsed onto one topic.
+        entry = {"id": b.id, "key": b.parent or b.key, "type": b.type,
+                 "title": _title_for(b),
                  "age_s": round(now - b.touched, 1), "revisions": b.revision}
         if b.parent:
-            entry["contradicts"] = b.parent
+            entry["is_contrast_of"] = b.parent
         out.append(entry)
     return out
 
@@ -357,10 +392,11 @@ def manifest_text() -> str:
         bits = f"  {e['id']}  key={e['key']:<18} {e['type']:<8} \"{e['title']}\""
         if e["revisions"]:
             bits += f"  (grown {e['revisions']}x)"
-        if e.get("contradicts"):
-            bits += f"  [contradicts {e['contradicts']}]"
+        if e.get("is_contrast_of"):
+            bits += "  [a contrasting view of this subject]"
         lines.append(f"{bits}  {e['age_s']}s ago")
-    lines.append("Reuse a key above to grow that block. Do not duplicate a topic.")
+    lines.append("Reuse a key above ONLY if the new line is about that same subject. "
+                 "A new subject needs a NEW key of your own choosing.")
     return "\n".join(lines)
 
 

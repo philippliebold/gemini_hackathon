@@ -23,6 +23,7 @@ import numpy as np
 
 import mics
 import ops
+import runtime
 from config import CFG
 
 import os
@@ -101,6 +102,10 @@ class LocalEar:
             return
         while True:
             await asyncio.sleep(TICK_S)
+            if not runtime.listening():
+                if self._samples:
+                    self._reset()          # drop anything captured while stopped
+                continue
             if not self._samples:
                 continue
             secs = self._samples / CFG.sample_rate

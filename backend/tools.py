@@ -587,7 +587,18 @@ def dispatch(name: str, args: dict) -> tuple[list[dict], dict]:
 
     args = dict(args or {})
     if "key" in args:
-        args["key"] = canvas.normalize_key(args.get("key"))
+        raw_key = args.get("key")
+        args["key"] = canvas.normalize_key(raw_key)
+        rev = args.get("revises")
+        if rev:
+            # The model is asked for a key but passes a block id (`b_2`) often
+            # enough that it has to be handled.
+            args["revises"] = canvas.key_of_block(rev) or canvas.normalize_key(rev)
+            if args["revises"] == args["key"]:
+                # Fuzzy matching collapsed the new key onto the very thing it is
+                # contradicting ('pricing-revised' -> 'pricing'). Keep the branch and
+                # give it a distinct key rather than silently dropping the tension.
+                args["key"] = f"{args['key']}-alt"
         if not args.get("revises") and not canvas.cooldown_ok(args["key"]):
             return [], {"skipped": "cooldown",
                         "reason": f"'{args['key']}' was just drawn; say something new "

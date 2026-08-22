@@ -304,3 +304,25 @@ body.clean.stirring .reveal {
   content: ""; position: absolute; top: 9px; right: 9px;
   width: 6px; height: 6px; border-radius: 50%; background: #7FB0FF;
 }
+
+
+/* ---------- the listen switch ---------- */
+.dock-btn.listen { font-weight: 600; }
+.dock-btn.listen.on { background: rgba(52,168,83,.26); color: #C8F0D2; }
+.dock-btn.listen.on .msym {
+  color: #6BD98A; font-variation-settings: "FILL" 1;
+  animation: listen-pulse 1.9s ease-in-out infinite;
+}
+@keyframes listen-pulse { 0%,100% { opacity: 1 } 50% { opacity: .45 } }
+.dock-btn.listen.off { background: rgba(234,67,53,.22); color: #FFC9C4; }
+.dock-btn.listen.off .msym { color: #F28B82; font-variation-settings: "FILL" 1; }
+
+/* a stopped mic must be obvious even with the dock hidden */
+body.stopped::after {
+  content: "mic stopped"; position: fixed; z-index: 70;
+  top: 18px; left: 50%; transform: translateX(-50%);
+  padding: 6px 14px; border-radius: 999px;
+  background: rgba(234,67,53,.20); border: 1px solid rgba(242,139,130,.35);
+  color: #FFC9C4; font: 500 12px/1 "Google Sans", Roboto, sans-serif;
+  letter-spacing: .1em; text-transform: uppercase; pointer-events: none;
+}

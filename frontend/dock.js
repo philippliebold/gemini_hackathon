@@ -42,7 +42,11 @@ const dock = {
   nAge:   document.getElementById("notes-age"),
   nClose: document.getElementById("notes-close"),
   reset:  document.getElementById("reset-btn"),
+  listen: document.getElementById("listen-btn"),
+  listenL: document.getElementById("listen-label"),
 };
+
+let listening = true;
 
 let notes = null;
 
@@ -97,7 +101,23 @@ function onMics(p) {
   }
   if (p.gate !== undefined) renderGate(p.gate);
   if (p.notes) onNotes(p.notes);
+  if (p.listening !== undefined) renderListen(p.listening);
   renderRoster();
+}
+
+/* Unambiguous from across a room: green pulse when the mic is live, plainly dead
+   when it is not. Nobody should have to wonder whether a hot mic is still billing. */
+function renderListen(on) {
+  listening = !!on;
+  if (!dock.listen) return;
+  dock.listen.classList.toggle("on", listening);
+  dock.listen.classList.toggle("off", !listening);
+  dock.listen.querySelector(".msym").textContent = listening ? "graphic_eq" : "mic_off";
+  if (dock.listenL) dock.listenL.textContent = listening ? "Listening" : "Stopped";
+  dock.listen.title = listening
+    ? "Stop listening — halts transcription and all API calls (L)"
+    : "Start listening (L)";
+  document.body.classList.toggle("stopped", !listening);
 }
 
 const esc = (t) => String(t == null ? "" : t).replace(/[<>&]/g, "");
@@ -285,7 +305,17 @@ addEventListener("keydown", (e) => {
   if (e.key.toLowerCase() === "n" && !e.metaKey && !e.ctrlKey && dock.notesBtn)
     dock.notesBtn.click();
 });
-window.CoDock = { onMics, onNotes };
+if (dock.listen) dock.listen.onclick = () => {
+  const next = !listening;
+  renderListen(next);                       /* optimistic; the backend confirms */
+  window.sendPresenter(next ? "listen_on" : "listen_off");
+  poke();
+};
+addEventListener("keydown", (e) => {
+  if (e.key.toLowerCase() === "l" && !e.metaKey && !e.ctrlKey && dock.listen)
+    dock.listen.click();
+});
+window.CoDock = { onMics, onNotes, renderListen };
 dock.clear.onclick = () => { window.CoStage.clearAll(); window.sendPresenter("clear"); };
 
 

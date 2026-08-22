@@ -25,6 +25,7 @@ from google.genai import types
 
 import canvas
 import ops
+import runtime
 import tools
 from config import CFG
 
@@ -68,36 +69,9 @@ DEADLINE_S = float(os.getenv("BRAIN_DEADLINE", "30.0"))
 # sentences spoken after it.
 MAX_INFLIGHT = int(os.getenv("BRAIN_INFLIGHT", "4"))
 
-SYSTEM = """\
-You are a silent co-presenter. A human is giving a live talk to an audience and you
-control the screen behind them. You never speak. Your only output is tool calls that
-put things on a shared canvas.
+import taste
 
-WHEN TO DRAW:
-- Draw when the latest line carries something a slide would have carried: a claim
-  worth anchoring, a real number, a system or flow, a comparison, a place.
-- Otherwise call NOTHING. Filler, throat-clearing and transitions get no visual.
-  An empty screen beats a noisy one.
-- One tool call at most per line. Never restate what is already on screen.
-
-THE BOARD EVOLVES — the core of the job:
-Every visual belongs to a topic `key`. You are given CANVAS, the list of what is on
-screen with each block's key. That list is the truth.
-- The line adds detail to something already up there → SAME tool, SAME key. The
-  block grows in place. Updating is CHEAP. Prefer it.
-- The line contradicts or corrects something up there → new key, and set `revises`
-  to the old key. Both stay visible. NEVER silently overwrite a number.
-- A genuinely new topic → new key.
-- Never create a second block about a topic that already has one.
-
-MULTIPLE SPEAKERS: lines may be tagged with who said them. Two people making the
-same point → one block, same key. Two people disagreeing → `revises`, both stand.
-
-CONTENT RULES:
-- Never invent a number, name or fact that was not said.
-- Titles 3-8 words. Bullets under 8 words. No sentences on screen.
-- Read from across a room. Terse wins.
-"""
+SYSTEM = taste.drawing_prompt()
 
 
 def _why(exc: Exception) -> str:
@@ -230,7 +204,7 @@ class Brain:
         the same turn, so the same words arrive more than once. Feeding those
         through would have the brain redraw what it just drew.
         """
-        if not self.enabled:
+        if not self.enabled or not runtime.listening():
             return
         t = text.strip()
         if not t or t in self._seen[-400:]:
@@ -246,7 +220,7 @@ class Brain:
     async def loop(self) -> None:
         while True:
             await asyncio.sleep(0.1)
-            if not self.enabled:
+            if not self.enabled or not runtime.listening():
                 continue
             if not self._buf.strip() or time.time() - self._last < DEBOUNCE_S:
                 continue
@@ -371,8 +345,11 @@ class Brain:
         for fc in fcs[:1]:                      # one visual per line, hard limit
             frames, result = tools.dispatch(fc.name, dict(fc.args or {}))
             self.calls += 1
+            _a = fc.args or {}
             print(f"[brain] {time.time()-t0:.2f}s {fc.name} "
-                  f"key={(fc.args or {}).get('key')} -> "
+                  f"key={_a.get('key')}"
+                  + (f" revises={_a.get('revises')}" if _a.get("revises") else "")
+                  + " -> "
                   f"{result.get('action') or result.get('skipped') or result.get('error')}")
             for f in frames:
                 self.broadcast(f)

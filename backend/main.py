@@ -32,8 +32,11 @@ from config import CFG
 
 async def local_pump(q: asyncio.Queue, ear, brain) -> None:
     """Drain the audio queue into the local ear instead of the Live session."""
+    import runtime
     while True:
         kind, payload = await q.get()
+        if not runtime.listening():
+            continue                       # stopped: drop it, do not buffer
         if kind == "audio":
             ear.feed(payload)
         elif kind == "speaker" and brain is not None:

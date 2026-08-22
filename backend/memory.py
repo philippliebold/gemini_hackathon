@@ -16,6 +16,7 @@ logs. Nothing here is ever awaited by the audio pipeline.
 """
 import asyncio
 import json
+import os
 import re
 import time
 from collections import deque
@@ -112,7 +113,10 @@ class TopicMemory:
                       f"{type(e).__name__}: {e}")
 
     async def _tick(self) -> None:
-        import canvas  # local import: canvas must not depend on memory
+        import canvas
+        import runtime
+        if not runtime.listening():
+            return  # local import: canvas must not depend on memory
 
         new = self._new_text()
         if len(new) < MIN_NEW_CHARS:
@@ -221,7 +225,15 @@ class TopicMemory:
             print(f"[mem] could not persist: {e}")
 
     def _load(self) -> None:
-        """Pick a talk back up after a full process restart."""
+        """Pick a talk back up after a full process restart.
+
+        OFF by default. It sounds helpful, but every restart inherited the previous
+        run-through's topics and the model then keyed new lines onto stale subjects —
+        a fresh test was never actually fresh. Set MEMORY_RESUME=1 only if you
+        genuinely want to continue an interrupted talk.
+        """
+        if os.getenv("MEMORY_RESUME", "0").lower() not in ("1", "true", "yes"):
+            return
         try:
             if not STATE_FILE.exists():
                 return

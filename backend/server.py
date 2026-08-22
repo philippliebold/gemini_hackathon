@@ -7,6 +7,7 @@ import websockets
 import canvas
 import mics
 import ops
+import runtime
 from config import CFG
 
 # Set by main.py. Lets the screen drive the mics without server.py importing the
@@ -54,6 +55,7 @@ def mics_payload() -> dict:
                 "device": mac.device if mac else None},
         "gate": mics.GATE_RMS,
         "ear": CONTROL.get("ear", "live"),
+        "listening": runtime.listening(),
         "notes": (CONTROL["memory"].summary
                   if CONTROL.get("memory") is not None else None),
         "brain": {"enabled": bool(brain and brain.enabled),
@@ -152,6 +154,10 @@ async def on_presenter(action: str | None) -> None:
             print("[said] no brain attached; run with --brain")
             return
         brain.feed(line)
+    elif action in ("listen_on", "listen_off"):
+        runtime.set_listening(action == "listen_on")
+        broadcast(ops.status("listening" if runtime.listening() else "idle"))
+        push_mics()
     elif action == "context_reset":
         # Full reset: the board, the running record, and the model's recent lines.
         # Rehearsing the same script three times otherwise has it reasoning about
