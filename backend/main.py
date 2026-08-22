@@ -8,6 +8,7 @@
     python backend/main.py --pcm talk.pcm   # replay a recording (add MANUAL_ACTIVITY=1)
     python backend/main.py --brain          # 3.7-flash decides instead of the ear
     python backend/main.py --local          # local Whisper ear + 3.7-flash brain
+    python backend/main.py --local --no-llm # fully offline: Whisper ear + no API
 
 Up to four phones can join at the printed https:// URL. See MICS.md.
 """
@@ -17,6 +18,7 @@ import sys
 
 import audio
 import brain as brain_mod
+import local_brain as local_brain_mod
 import ears_local
 import gemini_live
 import memory as memory_mod
@@ -105,7 +107,11 @@ async def main(args):
     # Always built, never enabled by default: the Live session calls the tools
     # itself on a real mic. The screen can hand the decision to gemini-3.7-flash
     # mid-talk if the ear turns out flaky.
-    brain = brain_mod.Brain(server.broadcast)
+    # --no-llm swaps in a brain that needs no API at all: pattern matching over
+    # the transcript. Worse judgement than the model, but Wikimedia photos and
+    # Maps routes need no Gemini quota, so a capped account still gives a talk.
+    brain = (local_brain_mod.LocalBrain(server.broadcast) if args.no_llm
+             else brain_mod.Brain(server.broadcast))
     # Survives every reconnect: holds the Live API resumption handle so a dropped
     # session comes back into the same conversation rather than a blank one.
     session_state: dict = {}
@@ -147,6 +153,14 @@ async def main(args):
         await brain.set_enabled(True)
         tasks = [server.serve(), mem.loop(), loop_watchdog(), brain.loop(),
                  local.loop(), local_pump(q, local, brain)]
+    elif args.no_llm:
+        # No Live session at all -- it would only reconnect-loop against a
+        # quota error. Transcripts arrive over the presenter channel (`said:`)
+        # from the browser's own speech recognition.
+        server.CONTROL["ear"] = "browser"
+        await brain.set_enabled(True)
+        tasks = [server.serve(), mem.loop(), loop_watchdog(), brain.loop()]
+        print("[main] no-LLM mode: browser transcribes, local brain draws")
     else:
         server.CONTROL["ear"] = "live"
         tasks = [server.serve(), ear(), mem.loop(), loop_watchdog(), brain.loop()]
@@ -191,6 +205,9 @@ if __name__ == "__main__":
     p.add_argument("--local", action="store_true",
                    help="transcribe locally with Whisper instead of the Live API: "
                         "continuous, no turn detection, audio never leaves the Mac")
+    p.add_argument("--no-llm", action="store_true",
+                   help="decide what to draw with local pattern matching instead "
+                        "of Gemini — works with no API quota at all")
     p.add_argument("--brain", action="store_true",
                    help="let gemini-3.7-flash make the drawing decisions from the "
                         "transcript instead of the Live session (fallback path)")
