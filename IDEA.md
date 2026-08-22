@@ -20,6 +20,19 @@ Gemini listens and paints the screen as you speak — an infinite Miro-like canv
 
 **Microphone is the primary input, and the room is the source — not one laptop.** Multiple mics can join the same session (each person's phone or laptop becomes a mic), so a four-person brainstorm feeds one shared canvas. The model knows who said what and can attribute, cluster, and reconcile across speakers.
 
+## The presenters are not looking at the screen
+
+This is the constraint that drives the whole visual design. Presenters stand or sit *in front of* the screen, facing the room. They talk to people, not to a display. They will not babysit the canvas, will not notice a subtle state change, and cannot be asked to "check if it got that right."
+
+Consequences, all of them non-negotiable:
+
+- **The room is the reader, not the presenter.** Everything must be legible from the back — large type, few words per block, high contrast. If it needs squinting, it failed.
+- **No error the presenter must notice.** Failures degrade silently. The board never shows a stack trace, a spinner that never resolves, or a modal.
+- **The screen self-narrates.** When a new block lands it must be obvious *without* anyone pointing at it — motion and elevation do the pointing.
+- **State lives in the Core Dots.** One glanceable element, readable across the room, tells everyone whether it's listening or thinking. Nothing else competes.
+- **No controls on screen.** No buttons, no cursor, no chrome. Anything interactive would demand attention the presenter can't give.
+- **Wrong is survivable, ugly is not.** A slightly-off block the room reads past is fine. A broken layout kills the demo.
+
 **Camera is optional** — a bonus channel, not a dependency. If it's on, held-up objects, whiteboards, and documents become canvas material. If it's off, nothing about the product breaks.
 
 ## Why this needs Gemini specifically
@@ -117,6 +130,22 @@ The hardest capability and the most valuable: most sentences do not deserve a vi
 5. Someone from the audience shouts an unplanned input. The canvas responds to it.
 6. The "I'm here, get me there" line → live route on screen.
 7. Pull back: the whole board was empty 90 seconds ago, and it's now a better artifact than a deck anyone would have made.
+
+## Visual language — Google CI
+
+The canvas uses Google's design identity, deliberately and consistently.
+
+**Typography.** Google Sans for display and headers (its geometric, architectural feel carries at distance); Roboto for dense data — tables, metrics, code; Noto as the global fallback so no script ever renders as tofu. This matters for a multilingual room.
+
+**The four-color logic.** Blue `#4285F4`, Red `#EA4335`, Yellow `#FBBC04`, Green `#34A853`. Used functionally, never decoratively:
+- Block accents — a 4px left rail, legible at ten metres, keeping the surface white the way Workspace surfaces stay white.
+- **Speaker attribution** — each mic in a multi-mic session gets one of the four colors. This is the cleanest possible answer to "who said this," and it is exactly the four-color system doing real work.
+- Chart series, in brand order.
+
+**The Core Dots.** When Gemini is listening or thinking, the brand becomes four morphing colored dots — the same signature used in Assistant and Gemini voice interfaces. This is our only always-on chrome, and it is the entire status system. State is expressed through *motion*, never by recoloring: a slow calm breath while listening, a faster tighter bounce while thinking, desaturated and still when muted. The four colors are fixed.
+
+**Material 3.** White surfaces on a faint dot grid, generous whitespace, 24px corner radii for approachability, and real elevation — the block under discussion lifts toward the viewer, because the screen has to signal focus itself when no presenter is pointing at it.
+
 
 ## Core loop
 

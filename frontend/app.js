@@ -124,13 +124,15 @@ function drawLinks() {
 }
 
 /* ---------- status ---------- */
-const DOT = { idle: "bg-zinc-700", listening: "bg-emerald-500",
-              thinking: "bg-amber-400", drawing: "bg-violet-500",
-              error: "bg-rose-500" };
+/* The four Core Dots ARE the status indicator: Google's brand exists as
+   motion in voice-first interfaces. State is carried by how they move,
+   never by recoloring them — the four colors are fixed. */
+const DOT = { idle: "muted", listening: "", thinking: "thinking",
+              drawing: "thinking", error: "muted" };
 
 function setStatus(p) {
   els.state.textContent = p.state;
-  els.dot.className = `w-2 h-2 rounded-full ${DOT[p.state] || "bg-zinc-700"}`;
+  els.dot.className = `core-dots ${DOT[p.state] ?? ""}`;
   if (p.transcript !== undefined) els.transcript.textContent = p.transcript || "";
 }
 

@@ -7,14 +7,24 @@
 <script src="https://cdn.tailwindcss.com"></script>
 <script type="module">
   import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
-  mermaid.initialize({ startOnLoad: false, theme: "dark",
-                       securityLevel: "loose", fontFamily: "inherit" });
+  mermaid.initialize({ startOnLoad: false, theme: "base",
+                       securityLevel: "loose", fontFamily: "inherit",
+                       themeVariables: {
+                         primaryColor: "#E8F0FE",  primaryTextColor: "#202124",
+                         primaryBorderColor: "#4285F4", lineColor: "#5F6368",
+                         secondaryColor: "#FCE8E6", tertiaryColor: "#E6F4EA",
+                         background: "#FFFFFF", mainBkg: "#E8F0FE",
+                         fontSize: "15px"
+                       } });
   window.mermaid = mermaid;
   window.dispatchEvent(new Event("mermaid-ready"));
 </script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Google+Sans+Code:wght@400;500&family=Roboto:wght@400;500;700&family=Roboto+Mono:wght@400;500&family=Noto+Sans:wght@400;500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="./styles.css">
 </head>
-<body class="bg-[#0b0b0f] text-zinc-100 overflow-hidden h-screen w-screen">
+<body class="overflow-hidden h-screen w-screen">
 
   <!-- camera-transformed world -->
   <div id="viewport" class="absolute inset-0">
@@ -27,18 +37,21 @@
 
   <!-- empty state -->
   <div id="empty" class="absolute inset-0 grid place-items-center pointer-events-none">
-    <p class="text-zinc-700 text-sm tracking-widest uppercase">listening</p>
+    <div class="flex flex-col items-center gap-6">
+      <div class="core-dots scale-[2.2]"><i></i><i></i><i></i><i></i></div>
+      <p class="text-sm tracking-widest uppercase">listening</p>
+    </div>
   </div>
 
   <!-- status chip -->
-  <div id="status" class="absolute bottom-6 left-6 flex items-center gap-2 text-xs
-                          text-zinc-500 font-mono">
-    <span id="dot" class="w-2 h-2 rounded-full bg-zinc-700"></span>
+  <div id="status" class="absolute bottom-6 left-6 flex items-center gap-3 text-xs
+                          text-[#5F6368]">
+    <span id="dot" class="core-dots"><i></i><i></i><i></i><i></i></span>
     <span id="state">connecting</span>
-    <span id="transcript" class="text-zinc-700 max-w-[46ch] truncate"></span>
+    <span id="transcript" class="text-[#80868B] max-w-[46ch] truncate"></span>
   </div>
 
-  <div class="absolute bottom-6 right-6 text-[10px] text-zinc-800 font-mono">
+  <div class="absolute bottom-6 right-6 text-[10px] text-[#BDC1C6]">
     scroll zoom · drag pan · F fit · C clear
   </div>
 

@@ -1,19 +1,74 @@
-:root { --ease: cubic-bezier(.22,1,.36,1); }
+/* ── Google CI ─────────────────────────────────────────────────────────
+   Type:  Google Sans (UI/headers) → Roboto (dense data) → Noto (fallback)
+   Color: Blue #4285F4 · Red #EA4335 · Yellow #FBBC04 · Green #34A853
+   Form:  Material 3 — generous whitespace, rounded corners, soft elevation
+   ─────────────────────────────────────────────────────────────────── */
+
+:root {
+  --ease: cubic-bezier(.22,1,.36,1);
+
+  --g-blue:   #4285F4;
+  --g-red:    #EA4335;
+  --g-yellow: #FBBC04;
+  --g-green:  #34A853;
+
+  /* Material 3 neutrals, light surface */
+  --surface:      #FFFFFF;
+  --surface-dim:  #F8F9FA;
+  --surface-sink: #F1F3F4;
+  --outline:      #DADCE0;
+  --on-surface:   #202124;
+  --on-muted:     #5F6368;
+  --on-faint:     #80868B;
+
+  --font-display: "Google Sans", "Product Sans", "Noto Sans", system-ui, sans-serif;
+  --font-body:    "Google Sans Text", "Google Sans", Roboto, "Noto Sans", system-ui, sans-serif;
+  --font-mono:    "Roboto Mono", ui-monospace, monospace;
+
+  /* Material 3 elevation */
+  --elev-1: 0 1px 2px rgba(60,64,67,.30), 0 1px 3px 1px rgba(60,64,67,.15);
+  --elev-2: 0 1px 3px rgba(60,64,67,.30), 0 4px 8px 3px rgba(60,64,67,.15);
+  --elev-3: 0 4px 8px rgba(60,64,67,.20), 0 10px 24px 6px rgba(60,64,67,.12);
+}
+
+html, body {
+  background: var(--surface-dim);
+  color: var(--on-surface);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Faint dot grid — reads as "board", stays quiet from the back of a room */
+#viewport {
+  background-image: radial-gradient(var(--outline) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
 
 #world { transition: transform .6s var(--ease); }
 #world.dragging { transition: none; }
 
+/* ── Blocks ─────────────────────────────────────────────────────────── */
+
 .block {
   position: absolute;
-  border-radius: 18px;
-  background: #14141b;
-  border: 1px solid #24242f;
-  box-shadow: 0 24px 60px -20px rgba(0,0,0,.9);
-  padding: 22px 24px;
-  transition: transform .6s var(--ease), opacity .4s ease, width .4s var(--ease);
+  border-radius: 24px;                 /* M3 approachability */
+  background: var(--surface);
+  border: 1px solid var(--outline);
+  box-shadow: var(--elev-2);
+  padding: 28px 32px;
+  font-family: var(--font-body);
+  color: var(--on-surface);
+  transition: transform .6s var(--ease), opacity .4s ease,
+              width .4s var(--ease), box-shadow .4s ease;
 }
 
-/* enter animations */
+/* The block the room is talking about right now lifts toward the viewer.
+   Presenters face the audience, so the SCREEN has to signal focus itself. */
+.block.is-focus {
+  box-shadow: var(--elev-3);
+  border-color: var(--g-blue);
+}
+
 .enter-pop  { animation: pop .45s var(--ease) both; }
 .enter-fade { animation: fade .6s ease both; }
 .enter-draw { animation: draw .7s var(--ease) both; }
@@ -24,24 +79,100 @@
                   to   { opacity:1; clip-path: inset(0 0 0 0) } }
 
 .block-title {
-  font-size: 12px; letter-spacing: .12em; text-transform: uppercase;
-  color: #6b6b7b; margin-bottom: 12px;
+  font-family: var(--font-display);
+  font-size: 12px;
+  letter-spacing: .10em;
+  text-transform: uppercase;
+  color: var(--on-muted);
+  margin-bottom: 14px;
 }
 
-.accent-violet  { border-color:#4c1d95; box-shadow:0 0 0 1px #4c1d9540, 0 24px 60px -20px #000 }
-.accent-amber   { border-color:#78350f }
-.accent-emerald { border-color:#064e3b }
-.accent-rose    { border-color:#881337 }
-.accent-slate   { border-color:#24242f }
+/* ── Accents: the four-color logic ──────────────────────────────────────
+   A 4px left rail rather than a full border — legible at 10 metres,
+   and it keeps the surface white the way Workspace surfaces stay white. */
+
+.block[class*="accent-"] { border-left-width: 4px; }
+
+.accent-blue,  .accent-violet { border-left-color: var(--g-blue);   }
+.accent-red,   .accent-rose   { border-left-color: var(--g-red);    }
+.accent-yellow,.accent-amber  { border-left-color: var(--g-yellow); }
+.accent-green, .accent-emerald{ border-left-color: var(--g-green);  }
+.accent-slate                 { border-left-color: var(--outline);  }
+
+/* ── Loading shimmer ────────────────────────────────────────────────── */
 
 .shimmer {
-  background: linear-gradient(100deg,#16161f 30%,#22222e 50%,#16161f 70%);
+  background: linear-gradient(100deg,
+    var(--surface-sink) 30%, #E8EAED 50%, var(--surface-sink) 70%);
   background-size: 200% 100%;
   animation: sh 1.4s linear infinite;
 }
 @keyframes sh { to { background-position: -200% 0 } }
 
-#links path { stroke:#3a3a4a; stroke-width:2; fill:none; }
-#links text { fill:#5a5a6a; font-size:11px; font-family:ui-monospace,monospace; }
+/* ── Links between blocks ───────────────────────────────────────────── */
 
-.mermaid svg { max-width:100%; height:auto; }
+#links path { stroke: var(--outline); stroke-width: 2; fill: none; }
+#links text {
+  fill: var(--on-faint);
+  font-size: 12px;
+  font-family: var(--font-body);
+}
+
+.mermaid svg { max-width: 100%; height: auto; }
+
+/* ── The Core Dots ──────────────────────────────────────────────────────
+   Google's voice-first signature: when the assistant is listening or
+   thinking, the brand exists purely as four morphing colored dots.
+   This is the only always-on chrome — presenters never look at it,
+   but the ROOM reads session state from across the space. */
+
+.core-dots { display: flex; align-items: center; gap: 7px; }
+.core-dots i {
+  width: 11px; height: 11px; border-radius: 50%;
+  display: block;
+  animation: dot-idle 2.4s var(--ease) infinite;
+}
+.core-dots i:nth-child(1) { background: var(--g-blue);   animation-delay: 0s;    }
+.core-dots i:nth-child(2) { background: var(--g-red);    animation-delay: .15s;  }
+.core-dots i:nth-child(3) { background: var(--g-yellow); animation-delay: .30s;  }
+.core-dots i:nth-child(4) { background: var(--g-green);  animation-delay: .45s;  }
+
+/* listening — a slow, calm breath */
+@keyframes dot-idle {
+  0%,100% { transform: scale(.72); opacity: .45 }
+  50%     { transform: scale(1);   opacity: 1   }
+}
+
+/* thinking — faster, tighter, unmistakably "working" */
+.core-dots.thinking i { animation: dot-think .7s var(--ease) infinite; }
+@keyframes dot-think {
+  0%,100% { transform: translateY(0) scale(.8) }
+  50%     { transform: translateY(-7px) scale(1.1) }
+}
+
+/* muted — desaturated, no motion */
+.core-dots.muted i { animation: none; opacity: .25; filter: grayscale(1); }
+
+/* ── Empty state ────────────────────────────────────────────────────── */
+
+#empty p {
+  font-family: var(--font-display);
+  color: var(--on-faint);
+}
+
+/* ── Speaker attribution ────────────────────────────────────────────────
+   Multi-mic: each voice gets one of the four brand colors. */
+
+.speaker-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12px; color: var(--on-muted);
+  font-family: var(--font-body);
+}
+.speaker-chip::before {
+  content: ""; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--speaker, var(--on-faint));
+}
+.speaker-1 { --speaker: var(--g-blue);   }
+.speaker-2 { --speaker: var(--g-red);    }
+.speaker-3 { --speaker: var(--g-yellow); }
+.speaker-4 { --speaker: var(--g-green);  }
