@@ -4,6 +4,7 @@ import json
 
 import websockets
 
+import canvas
 import ops
 from config import CFG
 
@@ -53,10 +54,18 @@ async def handler(ws):
 
 
 async def on_presenter(action: str | None) -> None:
-    """Presenter keyboard commands from the display."""
+    """Presenter keyboard commands from the display.
+
+    These must move backend state too, or canvas.py drifts out of sync with what
+    the room can actually see — and the model is told the stale version.
+    """
     if action == "clear":
+        canvas.reset()
         broadcast(ops.canvas_clear())
-    # TODO: undo / pause / resume
+    elif action == "undo":
+        for frame in canvas.undo_last():
+            broadcast(frame)
+    # TODO: pause / resume
 
 
 async def serve():

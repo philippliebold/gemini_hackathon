@@ -3,147 +3,163 @@
 The model does not describe visuals — it CALLS these. Each tool returns a list of
 wire frames (from ops.py) that get broadcast immediately.
 
+Every visual carries a topic `key`. Reusing a key GROWS the block that already owns
+it; setting `revises` places a contradiction beside the original. All of that state
+lives in canvas.py — nothing here hand-builds a frame or tracks a block id.
+
 Adding a tool: declare it in DECLARATIONS, implement `tool_<name>`, done.
 The dispatcher finds it by name.
 """
 from typing import Any
 
+import canvas
 import ops
 from config import CFG
+
+# --- the two params that make the board evolve ------------------------------
+# Spliced into every show_* declaration. This is the whole decision surface:
+#   same key, no revises  -> the existing block grows
+#   new key + revises     -> a contradiction lands beside the original
+#   new key               -> a new topic
+KEY_PARAM = {
+    "type": "string",
+    "description": (
+        "Short stable slug for the TOPIC this visual is about, lowercase, e.g. "
+        "'pricing', 'latency', 'pipeline'. If you are refining something already on "
+        "the canvas, REUSE ITS EXACT KEY — the existing block grows instead of "
+        "duplicating. Check the CANVAS list in your last tool result first."
+    ),
+}
+REVISES_PARAM = {
+    "type": "string",
+    "description": (
+        "Only when this CONTRADICTS or corrects something already on the canvas: set "
+        "to that block's key. The new visual is placed beside the original and both "
+        "stay visible. Leave empty when merely adding detail — reuse the same key "
+        "for that instead."
+    ),
+}
+
+
+def _decl(name: str, description: str, props: dict, required: list[str]) -> dict:
+    return {
+        "name": name,
+        "description": description,
+        "parameters": {
+            "type": "object",
+            "properties": {**props, "key": KEY_PARAM, "revises": REVISES_PARAM},
+            "required": [*required, "key"],
+        },
+    }
+
 
 # --- declarations the Live session advertises -------------------------------
 # Keep descriptions blunt and behavioural. This is the taste knob for the whole
 # product: it decides WHEN something lands on screen.
 
 DECLARATIONS: list[dict[str, Any]] = [
-    {
-        "name": "show_concept",
-        "description": (
-            "Put a concept card on the canvas. Use when the speaker makes a point "
-            "worth anchoring: a claim, a definition, a list of reasons. "
-            "Title must be 3-8 words. Max 4 bullets, each under 8 words."
-        ),
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "title": {"type": "string"},
-                "bullets": {"type": "array", "items": {"type": "string"}},
-                "accent": {"type": "string",
-                           "enum": ["violet", "amber", "emerald", "rose", "slate"]},
-            },
-            "required": ["title"],
+    _decl(
+        "show_concept",
+        "Put a concept card on the canvas. Use when the speaker makes a point worth "
+        "anchoring: a claim, a definition, a list of reasons. Title must be 3-8 words. "
+        "Max 4 bullets, each under 8 words. Reuse the key to append a bullet as the "
+        "speaker develops the same point.",
+        {
+            "title": {"type": "string"},
+            "bullets": {"type": "array", "items": {"type": "string"}},
+            "accent": {"type": "string",
+                       "enum": ["violet", "amber", "emerald", "rose", "slate"]},
         },
-    },
-    {
-        "name": "show_stat",
-        "description": (
-            "Put one big number on screen. Use ONLY when the speaker says an actual "
-            "figure, percentage, duration, or price. Never invent a number."
-        ),
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "value": {"type": "string", "description": "e.g. '1.4s', '60%', '$0.75'"},
-                "label": {"type": "string", "description": "what it measures, under 6 words"},
-                "delta": {"type": "string"},
-            },
-            "required": ["value", "label"],
+        ["title"],
+    ),
+    _decl(
+        "show_stat",
+        "Put one big number on screen. Use ONLY when the speaker says an actual "
+        "figure, percentage, duration, or price. Never invent a number. If they "
+        "later restate the same figure more precisely, reuse the key; if they "
+        "CORRECT it, set revises so both numbers stay visible.",
+        {
+            "value": {"type": "string", "description": "e.g. '1.4s', '60%', '$0.75'"},
+            "label": {"type": "string", "description": "what it measures, under 6 words"},
+            "delta": {"type": "string"},
         },
-    },
-    {
-        "name": "show_diagram",
-        "description": (
-            "Draw a Mermaid diagram. Use when the speaker describes a system, a flow, "
-            "a sequence of steps, or how parts connect. Prefer 'graph LR' with 3-7 "
-            "nodes. Keep node labels under 3 words."
-        ),
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "title": {"type": "string"},
-                "mermaid": {"type": "string",
-                            "description": "valid Mermaid source, e.g. 'graph LR\\n A[mic] --> B[model]'"},
-            },
-            "required": ["mermaid"],
+        ["value", "label"],
+    ),
+    _decl(
+        "show_diagram",
+        "Draw a Mermaid diagram. Use when the speaker describes a system, a flow, a "
+        "sequence of steps, or how parts connect. Prefer 'graph LR' with 3-7 nodes. "
+        "Keep node labels under 3 words. Reuse the key with the full updated source "
+        "to extend a diagram already on screen.",
+        {
+            "title": {"type": "string"},
+            "mermaid": {"type": "string",
+                        "description": "valid Mermaid source, e.g. 'graph LR\\n A[mic] --> B[model]'"},
         },
-    },
-    {
-        "name": "show_chart",
-        "description": (
-            "Chart numeric comparisons the speaker states. Use when 2+ related "
-            "numbers are mentioned together."
-        ),
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "title": {"type": "string"},
-                "kind": {"type": "string", "enum": ["bar", "line", "pie"]},
-                "unit": {"type": "string"},
-                "series": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {"label": {"type": "string"},
-                                       "value": {"type": "number"}},
-                        "required": ["label", "value"],
-                    },
+        ["mermaid"],
+    ),
+    _decl(
+        "show_chart",
+        "Chart numeric comparisons the speaker states. Use when 2+ related numbers "
+        "are mentioned together. Reusing the key MERGES new series in by label — so "
+        "send only the new points as the speaker says them and the chart fills in.",
+        {
+            "title": {"type": "string"},
+            "kind": {"type": "string", "enum": ["bar", "line", "pie"]},
+            "unit": {"type": "string"},
+            "series": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {"label": {"type": "string"},
+                                   "value": {"type": "number"}},
+                    "required": ["label", "value"],
                 },
             },
-            "required": ["kind", "series"],
         },
-    },
-    {
-        "name": "show_table",
-        "description": "Compare things across dimensions. Max 4 columns, max 5 rows.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "title": {"type": "string"},
-                "columns": {"type": "array", "items": {"type": "string"}},
-                "rows": {"type": "array",
-                         "items": {"type": "array", "items": {"type": "string"}}},
-            },
-            "required": ["columns", "rows"],
+        ["kind", "series"],
+    ),
+    _decl(
+        "show_table",
+        "Compare things across dimensions. Max 4 columns, max 5 rows. Reusing the key "
+        "merges rows by their first cell, so a comparison can be filled in one row at "
+        "a time as each option is discussed.",
+        {
+            "title": {"type": "string"},
+            "columns": {"type": "array", "items": {"type": "string"}},
+            "rows": {"type": "array",
+                     "items": {"type": "array", "items": {"type": "string"}}},
         },
-    },
-    {
-        "name": "show_route",
-        "description": (
-            "Show a map with a route between two places. Use when the speaker names "
-            "an origin and a destination, or asks how to get somewhere."
-        ),
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "origin": {"type": "string"},
-                "destination": {"type": "string"},
-                "mode": {"type": "string",
-                         "enum": ["walking", "driving", "transit", "bicycling"]},
-            },
-            "required": ["origin", "destination"],
+        ["columns", "rows"],
+    ),
+    _decl(
+        "show_route",
+        "Show a map with a route between two places. Use when the speaker names an "
+        "origin and a destination, or asks how to get somewhere.",
+        {
+            "origin": {"type": "string"},
+            "destination": {"type": "string"},
+            "mode": {"type": "string",
+                     "enum": ["walking", "driving", "transit", "bicycling"]},
         },
-    },
-    {
-        "name": "show_image",
-        "description": (
-            "Generate and show an illustrative image or mockup. Use when the speaker "
-            "says they imagine, picture, or envision something visual. Slow (~3s) — "
-            "use sparingly."
-        ),
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "prompt": {"type": "string"},
-                "caption": {"type": "string"},
-            },
-            "required": ["prompt"],
+        ["origin", "destination"],
+    ),
+    _decl(
+        "show_image",
+        "Generate and show an illustrative image or mockup. Use when the speaker says "
+        "they imagine, picture, or envision something visual. Slow (~3s) — use sparingly.",
+        {
+            "prompt": {"type": "string"},
+            "caption": {"type": "string"},
         },
-    },
+        ["prompt"],
+    ),
     {
         "name": "connect_blocks",
         "description": (
             "Draw an arrow between two blocks already on the canvas, when the speaker "
-            "relates two ideas. Use the ids you were told about."
+            "relates two ideas. Use block ids from the CANVAS list in your last tool "
+            "result — never guess an id."
         ),
         "parameters": {
             "type": "object",
@@ -163,43 +179,74 @@ DECLARATIONS: list[dict[str, Any]] = [
 ]
 
 
+# --- the single write path --------------------------------------------------
+def _emit(type_: str, key: str, data: dict, revises: str | None = None,
+          needs: tuple[str, ...] = (), **kw) -> tuple[list[dict], dict]:
+    """Upsert or branch, then append a throttled camera hint.
+
+    `needs` are the fields a BRAND NEW block cannot render without. An update may
+    legitimately carry only the fields that changed, so they are enforced here on
+    the add path rather than in the Python signatures.
+    """
+    data = {k: v for k, v in data.items() if v is not None}
+    existing = canvas.BLOCKS.get(canvas.BY_KEY.get(key, ""))
+    # A brand new block is created by: an unseen key, an explicit `revises`, or a
+    # known key arriving with a different block type (which branches). All three
+    # need the full payload — only a same-type update may be partial.
+    if revises or existing is None or existing.type != type_:
+        missing = [f for f in needs if not data.get(f)]
+        if missing:
+            return [], {"error": f"a new {type_} block needs {missing}; "
+                                 f"resend with those fields", "key": key}
+    if revises:
+        frames, bid = canvas.branch(type_, key, data, revises=revises, **kw)
+        action = "branch"
+    else:
+        frames, bid, action = canvas.upsert(type_, key, data, **kw)
+    frames = frames + canvas.focus_frames(action, bid)
+    return frames, {"block_id": bid, "key": key, "action": action}
+
+
 # --- implementations --------------------------------------------------------
 # Each returns (frames, result_for_model).
 
-def tool_show_concept(title: str, bullets: list[str] | None = None,
-                      accent: str = "slate", **_):
-    f = ops.block_add("text", {"title": title, "bullets": bullets or [],
-                               "accent": accent})
-    return [f], {"block_id": f["payload"]["id"]}
+def tool_show_concept(key: str, title: str | None = None,
+                      bullets: list[str] | None = None, accent: str | None = None,
+                      revises: str | None = None, **_):
+    return _emit("text", key, {"title": title, "bullets": bullets or [],
+                               "accent": accent}, revises, needs=("title",))
 
 
-def tool_show_stat(value: str, label: str, delta: str | None = None, **_):
-    f = ops.block_add("stat", {"value": value, "label": label, "delta": delta},
-                      w=320, h=200)
-    return [f], {"block_id": f["payload"]["id"]}
+def tool_show_stat(key: str, value: str | None = None, label: str | None = None,
+                   delta: str | None = None, revises: str | None = None, **_):
+    return _emit("stat", key, {"value": value, "label": label, "delta": delta},
+                 revises, needs=("value",), w=320, h=200)
 
 
-def tool_show_diagram(mermaid: str, title: str | None = None, **_):
-    f = ops.block_add("diagram", {"title": title, "mermaid": mermaid},
-                      w=560, h=320, enter="draw")
-    return [f], {"block_id": f["payload"]["id"]}
+def tool_show_diagram(key: str, mermaid: str | None = None,
+                      title: str | None = None, revises: str | None = None, **_):
+    return _emit("diagram", key, {"title": title, "mermaid": mermaid}, revises,
+                 needs=("mermaid",), w=560, h=320, enter="draw")
 
 
-def tool_show_chart(kind: str, series: list[dict], title: str | None = None,
-                    unit: str | None = None, **_):
-    f = ops.block_add("chart", {"title": title, "kind": kind, "unit": unit,
-                                "series": series}, w=460, h=300, enter="fade")
-    return [f], {"block_id": f["payload"]["id"]}
+def tool_show_chart(key: str, kind: str | None = None,
+                    series: list[dict] | None = None, title: str | None = None,
+                    unit: str | None = None, revises: str | None = None, **_):
+    return _emit("chart", key, {"title": title, "kind": kind, "unit": unit,
+                                "series": series}, revises,
+                 needs=("kind", "series"), w=460, h=300, enter="fade")
 
 
-def tool_show_table(columns: list[str], rows: list[list[str]],
-                    title: str | None = None, **_):
-    f = ops.block_add("table", {"title": title, "columns": columns, "rows": rows},
-                      w=460, h=260, enter="fade")
-    return [f], {"block_id": f["payload"]["id"]}
+def tool_show_table(key: str, columns: list[str] | None = None,
+                    rows: list[list[str]] | None = None, title: str | None = None,
+                    revises: str | None = None, **_):
+    return _emit("table", key, {"title": title, "columns": columns, "rows": rows},
+                 revises, needs=("columns", "rows"), w=460, h=260, enter="fade")
 
 
-def tool_show_route(origin: str, destination: str, mode: str = "walking", **_):
+def tool_show_route(key: str, origin: str | None = None,
+                    destination: str | None = None, mode: str = "walking",
+                    revises: str | None = None, **_):
     data = {"from": origin, "to": destination, "mode": mode}
     if CFG.maps_key:
         # TODO: call Directions API, fill duration/distance/polyline.
@@ -210,34 +257,56 @@ def tool_show_route(origin: str, destination: str, mode: str = "walking", **_):
     else:
         data |= {"duration": "8 min", "distance": "650 m",
                  "polyline": [[0, 0], [30, 60], [80, 70], [120, 140], [190, 160]]}
-    f = ops.block_add("map", data, w=420, h=320)
-    return [f], {"block_id": f["payload"]["id"], "duration": data.get("duration")}
+    frames, result = _emit("map", key, data, revises,
+                           needs=("from", "to"), w=420, h=320)
+    return frames, result | {"duration": data.get("duration")}
 
 
-def tool_show_image(prompt: str, caption: str | None = None, **_):
+def tool_show_image(key: str, prompt: str | None = None,
+                    caption: str | None = None, revises: str | None = None, **_):
     # Two-phase: placeholder now, real pixels when generation lands. The
     # placeholder is what keeps perceived latency under 2s.
-    f = ops.block_add("image", {"src": None, "caption": caption or prompt,
-                                "alt": prompt}, w=420, h=320, enter="fade")
+    frames, result = _emit("image", key, {"src": None, "caption": caption or prompt,
+                                          "alt": prompt}, revises,
+                           needs=("alt",), w=420, h=320, enter="fade")
     # TODO: kick off async image gen, then broadcast
-    #   ops.block_update(block_id, {"src": data_uri})
-    return [f], {"block_id": f["payload"]["id"], "status": "generating"}
+    #   ops.block_update(result["block_id"], {"src": data_uri})
+    return frames, result | {"status": "generating"}
 
 
 def tool_connect_blocks(from_id: str, to_id: str, label: str | None = None, **_):
-    return [ops.link_add(from_id, to_id, label)], {"ok": True}
+    frames = canvas.link(from_id, to_id, label)
+    if not frames:
+        return [], {"error": "one of those block ids is not on the canvas; "
+                             "use ids from the CANVAS list"}
+    return frames, {"ok": True}
 
 
 def tool_clear_canvas(**_):
+    canvas.reset()
     return [ops.canvas_clear()], {"ok": True}
 
 
 def dispatch(name: str, args: dict) -> tuple[list[dict], dict]:
-    """Run a tool call. Never raises — a bad call must not kill the session."""
+    """Run a tool call. Never raises — a bad call must not kill the session.
+
+    Every result carries the canvas manifest back to the model. That round trip is
+    what stops it duplicating a topic it already drew, and it costs no extra API call.
+    """
     fn = globals().get(f"tool_{name}")
     if fn is None:
-        return [], {"error": f"unknown tool {name}"}
+        return [], {"error": f"unknown tool {name}", "canvas": canvas.manifest()}
+
+    args = dict(args or {})
+    if "key" in args:
+        args["key"] = canvas.normalize_key(args.get("key"))
+        if not args.get("revises") and not canvas.cooldown_ok(args["key"]):
+            return [], {"skipped": "cooldown",
+                        "reason": f"'{args['key']}' was just drawn; say something new "
+                                  f"or wait before revisiting it",
+                        "canvas": canvas.manifest()}
     try:
-        return fn(**(args or {}))
+        frames, result = fn(**args)
+        return frames, result | {"canvas": canvas.manifest()}
     except Exception as e:  # noqa: BLE001 - on stage, degrade don't die
-        return [], {"error": f"{type(e).__name__}: {e}"}
+        return [], {"error": f"{type(e).__name__}: {e}", "canvas": canvas.manifest()}

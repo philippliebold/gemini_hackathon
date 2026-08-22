@@ -1,0 +1,344 @@
+"""Canvas state: the backend's truth about what is on screen.
+
+The board is an evolving artifact, not a feed. That distinction lives here.
+
+Every visual belongs to a topic `key`. Draw about a key that already exists and
+the existing block GROWS (`block.update`); contradict one and we BRANCH beside it
+(`block.add` + `link.add`) so nothing is silently overwritten.
+
+`key` and `revision` are backend-only. Nothing here changes the wire protocol —
+we still emit exactly the ops in CONTRACT.md. Do not leak keys into `data`.
+"""
+import difflib
+import itertools
+import re
+import time
+from dataclasses import dataclass, field
+from typing import Any, Callable
+
+import ops
+
+# --- tuning knobs -----------------------------------------------------------
+MAX_BULLETS = 6         # a card may grow past the per-call cap of 4, but not forever
+KEY_CUTOFF = 0.8        # difflib similarity for collapsing near-duplicate keys
+COOLDOWN_S = 6.0        # per-key debounce; one long sentence must not update thrice
+FOCUS_THROTTLE_S = 3.5  # camera moves per second budget, or the room gets seasick
+
+_COL_PITCH = 1200       # wide enough that a branch never collides with the next column
+_COL_BASE = -220        # centres a standard 440-wide block on the origin
+_ROW_GAP = 40
+_BRANCH_GAP = 60
+_Y0 = -180
+
+
+@dataclass
+class Block:
+    id: str
+    type: str
+    key: str
+    data: dict
+    x: int
+    y: int
+    w: int
+    h: int
+    created: float
+    touched: float
+    revision: int = 0
+    parent: str | None = None      # key of the block this one contradicts
+
+    @property
+    def cluster(self) -> str:
+        return self.key.split(".")[0]
+
+
+# --- state ------------------------------------------------------------------
+BLOCKS: dict[str, Block] = {}
+BY_KEY: dict[str, str] = {}
+LINKS: dict[str, dict] = {}
+
+_cluster_col: dict[str, int] = {}
+_cluster_bottom: dict[str, int] = {}
+_alt_n = itertools.count(1)
+_last_focus = 0.0
+
+
+def reset() -> None:
+    """Wipe backend state. Block ids keep counting up; `seq` must stay monotonic."""
+    global _last_focus
+    BLOCKS.clear()
+    BY_KEY.clear()
+    LINKS.clear()
+    _cluster_col.clear()
+    _cluster_bottom.clear()
+    _last_focus = 0.0
+
+
+# --- keys -------------------------------------------------------------------
+def normalize_key(raw: str | None) -> str:
+    """Slugify, then collapse onto an existing near-identical key.
+
+    The model will say 'pricing', 'price' and 'pricing model' for one topic. Every
+    miss here is a duplicate card on screen, which is the exact bug we are fixing.
+    """
+    slug = re.sub(r"[^a-z0-9.]+", "-", (raw or "").strip().lower()).strip("-.")
+    if not slug:
+        return "misc"
+    if slug in BY_KEY:
+        return slug
+
+    # Only ever collapse onto a top-level topic, never onto a branch key.
+    # Longest first, so the most specific existing topic wins.
+    topics = sorted((k for k in BY_KEY if "." not in k), key=len, reverse=True)
+
+    # A slug that extends an existing topic IS that topic, said more specifically:
+    # 'pricing-model' -> 'pricing'. difflib scores that pair 0.70 and would miss it,
+    # and every miss is a duplicate card on screen.
+    for c in topics:
+        if slug.startswith(f"{c}-") or c.startswith(f"{slug}-"):
+            return c
+
+    # Fallback catches inflections difflib is good at: 'price' -> 'pricing'.
+    match = difflib.get_close_matches(slug, topics, n=1, cutoff=KEY_CUTOFF)
+    return match[0] if match else slug
+
+
+# --- merge rules ------------------------------------------------------------
+# This is where "the card grows smoothly" is won or lost.
+
+def _clean(d: dict) -> dict:
+    return {k: v for k, v in (d or {}).items() if v is not None}
+
+
+def _merge_replace(old: dict, new: dict) -> dict:
+    return {**old, **_clean(new)}
+
+
+def _merge_text(old: dict, new: dict) -> dict:
+    out = {**old, **_clean({k: new.get(k) for k in ("title", "body", "accent")})}
+    bullets = list(old.get("bullets") or [])
+    seen = {b.strip().lower() for b in bullets}
+    for b in new.get("bullets") or []:
+        k = b.strip().lower()
+        if k and k not in seen:
+            bullets.append(b)
+            seen.add(k)
+    out["bullets"] = bullets[-MAX_BULLETS:]
+    return out
+
+
+def _merge_stat(old: dict, new: dict) -> dict:
+    return {**old, **_clean({k: new.get(k)
+                             for k in ("value", "label", "delta", "unit")})}
+
+
+def _merge_chart(old: dict, new: dict) -> dict:
+    """Merge series BY LABEL — a chart that fills in as numbers get spoken."""
+    out = {**old, **_clean({k: new.get(k) for k in ("title", "kind", "unit")})}
+    series = [dict(s) for s in (old.get("series") or [])]
+    idx = {str(s.get("label", "")).strip().lower(): i for i, s in enumerate(series)}
+    for s in new.get("series") or []:
+        k = str(s.get("label", "")).strip().lower()
+        if k in idx:
+            series[idx[k]] = dict(s)
+        else:
+            idx[k] = len(series)
+            series.append(dict(s))
+    out["series"] = series
+    return out
+
+
+def _merge_table(old: dict, new: dict) -> dict:
+    """Merge rows by first cell; widen columns but never narrow them."""
+    out = {**old, **_clean({"title": new.get("title")})}
+    old_cols, new_cols = old.get("columns") or [], new.get("columns") or []
+    out["columns"] = new_cols if len(new_cols) > len(old_cols) else old_cols
+    rows = [list(r) for r in (old.get("rows") or [])]
+
+    def rk(r):
+        return str(r[0]).strip().lower() if r else ""
+
+    idx = {rk(r): i for i, r in enumerate(rows)}
+    for r in new.get("rows") or []:
+        k = rk(r)
+        if k in idx:
+            rows[idx[k]] = list(r)
+        else:
+            idx[k] = len(rows)
+            rows.append(list(r))
+    out["rows"] = rows
+    return out
+
+
+MERGERS: dict[str, Callable[[dict, dict], dict]] = {
+    "text": _merge_text,
+    "stat": _merge_stat,
+    "chart": _merge_chart,
+    "table": _merge_table,
+    # diagram/map/image/code: replaced wholesale. Mermaid source cannot be
+    # merged safely, and the rest are single-payload blocks.
+}
+
+
+# --- layout: cluster-aware, so related things share a column ----------------
+def _column_for(cluster: str) -> int:
+    """Assign a column per topic, growing outward from the centre."""
+    if cluster not in _cluster_col:
+        i = len(_cluster_col)
+        k, sign = (i + 1) // 2, (1 if i % 2 else -1)
+        _cluster_col[cluster] = _COL_BASE + (0 if i == 0 else sign * k * _COL_PITCH)
+    return _cluster_col[cluster]
+
+
+def _place(cluster: str, h: int) -> tuple[int, int]:
+    """Next free slot in a cluster's column, stacked by real height."""
+    x = _column_for(cluster)
+    bottom = _cluster_bottom.get(cluster)
+    y = _Y0 if bottom is None else bottom + _ROW_GAP
+    _cluster_bottom[cluster] = y + h
+    return x, y
+
+
+# --- the two write paths ----------------------------------------------------
+def upsert(type_: str, key: str, data: dict, *, w: int = 440, h: int = 280,
+           enter: str = "pop") -> tuple[list[dict], str, str]:
+    """Add a block for a new topic, or grow the one that already owns this key.
+
+    Returns (frames, block_id, action) where action is "add" or "update".
+    """
+    existing_id = BY_KEY.get(key)
+    now = time.time()
+
+    if existing_id and BLOCKS[existing_id].type == type_:
+        b = BLOCKS[existing_id]
+        merger = MERGERS.get(type_, _merge_replace)
+        b.data = merger(b.data, data)
+        b.revision += 1
+        b.touched = now
+        return [ops.block_update(b.id, b.data)], b.id, "update"
+
+    if existing_id:
+        # same topic, different shape (a stat becomes a chart). Branch rather
+        # than mutate — the frontend cannot change a block's type in place.
+        frames, bid = branch(type_, key, data, revises=key, label="in detail",
+                             w=w, h=h, enter=enter)
+        return frames, bid, "branch"
+
+    x, y = _place(key.split(".")[0], h)
+    frame = ops.block_add(type_, data, x=x, y=y, w=w, h=h, enter=enter)
+    bid = frame["payload"]["id"]
+    BLOCKS[bid] = Block(id=bid, type=type_, key=key, data=data, x=x, y=y, w=w,
+                        h=h, created=now, touched=now)
+    BY_KEY[key] = bid
+    return [frame], bid, "add"
+
+
+def branch(type_: str, key: str, data: dict, *, revises: str, label: str | None = None,
+           w: int = 440, h: int = 280, enter: str = "pop") -> tuple[list[dict], str]:
+    """A contradiction: place beside the original with an arrow. Both survive."""
+    parent_id = BY_KEY.get(normalize_key(revises))
+    if parent_id is None:
+        frames, bid, _ = upsert(type_, key, data, w=w, h=h, enter=enter)
+        return frames, bid
+
+    parent = BLOCKS[parent_id]
+    alt_key = f"{parent.cluster}.alt{next(_alt_n)}"
+    x, y = parent.x + parent.w + _BRANCH_GAP, parent.y
+    now = time.time()
+
+    add = ops.block_add(type_, data, x=x, y=y, w=w, h=h, enter=enter)
+    bid = add["payload"]["id"]
+    BLOCKS[bid] = Block(id=bid, type=type_, key=alt_key, data=data, x=x, y=y, w=w,
+                        h=h, created=now, touched=now, parent=parent.key)
+    BY_KEY[alt_key] = bid
+
+    link = ops.link_add(parent_id, bid, label or "vs")
+    LINKS[link["payload"]["id"]] = link["payload"]
+    return [add, link], bid
+
+
+def link(from_id: str, to_id: str, label: str | None = None) -> list[dict]:
+    """Explicit connection between two live blocks. Silently drops dead ids."""
+    if from_id not in BLOCKS or to_id not in BLOCKS or from_id == to_id:
+        return []
+    f = ops.link_add(from_id, to_id, label)
+    LINKS[f["payload"]["id"]] = f["payload"]
+    return [f]
+
+
+def undo_last() -> list[dict]:
+    """Remove the most recently touched block. Backs the presenter's `u` key."""
+    if not BLOCKS:
+        return []
+    bid = max(BLOCKS, key=lambda i: BLOCKS[i].touched)
+    b = BLOCKS.pop(bid)
+    BY_KEY.pop(b.key, None)
+    for lid in [i for i, l in LINKS.items() if bid in (l["from"], l["to"])]:
+        LINKS.pop(lid)
+    if not any(x.cluster == b.cluster for x in BLOCKS.values()):
+        _cluster_bottom.pop(b.cluster, None)
+    return [ops.block_remove(bid)]
+
+
+# --- reads ------------------------------------------------------------------
+def cooldown_ok(key: str, seconds: float | None = None) -> bool:
+    """New topics always pass; only re-touching a live block is rate limited.
+
+    Reads COOLDOWN_S at call time, not import time, so tests can retune it.
+    """
+    seconds = COOLDOWN_S if seconds is None else seconds
+    bid = BY_KEY.get(key)
+    return True if bid is None else (time.time() - BLOCKS[bid].touched) >= seconds
+
+
+def _title_for(b: Block) -> str:
+    d = b.data
+    if b.type == "stat":
+        return f"{d.get('value', '?')} — {d.get('label', '')}".strip(" —")
+    if b.type == "map":
+        return f"{d.get('from', '?')} → {d.get('to', '?')}"
+    if b.type == "image":
+        return str(d.get("caption") or d.get("alt") or "image")[:60]
+    return str(d.get("title") or "").strip()[:60] or f"({b.type})"
+
+
+def manifest(limit: int = 12) -> list[dict[str, Any]]:
+    """What the model is told is on screen. Newest activity first."""
+    now = time.time()
+    out = []
+    for b in sorted(BLOCKS.values(), key=lambda x: -x.touched)[:limit]:
+        entry = {"id": b.id, "key": b.key, "type": b.type, "title": _title_for(b),
+                 "age_s": round(now - b.touched, 1), "revisions": b.revision}
+        if b.parent:
+            entry["contradicts"] = b.parent
+        out.append(entry)
+    return out
+
+
+def manifest_text() -> str:
+    """Flattened manifest for send_client_content (the heartbeat / resume path)."""
+    if not BLOCKS:
+        return "CANVAS: empty. Nothing is on screen yet."
+    lines = ["CANVAS — what is on screen right now:"]
+    for e in manifest():
+        bits = f"  {e['id']}  key={e['key']:<18} {e['type']:<8} \"{e['title']}\""
+        if e["revisions"]:
+            bits += f"  (grown {e['revisions']}x)"
+        if e.get("contradicts"):
+            bits += f"  [contradicts {e['contradicts']}]"
+        lines.append(f"{bits}  {e['age_s']}s ago")
+    lines.append("Reuse a key above to grow that block. Do not duplicate a topic.")
+    return "\n".join(lines)
+
+
+def focus_frames(action: str, block_id: str) -> list[dict]:
+    """Camera hint after a write. Throttled — an add fits all, an update zooms in."""
+    global _last_focus
+    now = time.time()
+    if now - _last_focus < FOCUS_THROTTLE_S:
+        return []
+    _last_focus = now
+    b = BLOCKS.get(block_id)
+    if action == "add" or b is None:
+        return [ops.canvas_focus([])]          # show the board growing
+    ids = [x.id for x in BLOCKS.values() if x.cluster == b.cluster]
+    return [ops.canvas_focus(ids, padding=100)]  # draw the eye to what changed

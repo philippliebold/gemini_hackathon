@@ -11,6 +11,7 @@ import sys
 
 import audio
 import gemini_live
+import memory as memory_mod
 import ops
 import server
 from config import CFG
@@ -24,16 +25,21 @@ async def main(args):
     source = (audio.file_chunks(q, args.pcm) if args.pcm
               else audio.mic_chunks(q, args.device))
 
+    mem = memory_mod.TopicMemory()
+    # Survives every reconnect: holds the Live API resumption handle so a dropped
+    # session comes back into the same conversation rather than a blank one.
+    session_state: dict = {}
+
     async def ear():
         while True:
             try:
-                await gemini_live.run(q, server.broadcast)
+                await gemini_live.run(q, server.broadcast, mem, session_state)
             except Exception as e:  # noqa: BLE001 - reconnect, never die on stage
                 print(f"[live] session died: {type(e).__name__}: {e}; retrying in 2s")
                 server.broadcast(ops.status("error"))
                 await asyncio.sleep(2)
 
-    await asyncio.gather(server.serve(), source, ear())
+    await asyncio.gather(server.serve(), source, ear(), mem.loop())
 
 
 if __name__ == "__main__":

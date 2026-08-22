@@ -1,0 +1,28 @@
+{"delay": 0.0, "op": "canvas.clear", "payload": {}}
+{"delay": 0.5, "op": "status", "payload": {"state": "listening"}}
+{"delay": 0.0, "op": "status", "payload": {"state": "thinking", "transcript": "so nobody wants to build slides for a ten minute brainstorm"}}
+{"delay": 0.9, "op": "block.add", "payload": {"id": "b_1", "type": "text", "x": -220, "y": -180, "w": 440, "h": 280, "enter": "pop", "data": {"title": "Nobody builds slides for 10 minutes", "bullets": ["decks are slow to make"], "accent": "slate"}}}
+{"delay": 0.25, "op": "canvas.focus", "payload": {"ids": [], "padding": 80}}
+{"delay": 2.6, "op": "status", "payload": {"state": "thinking", "transcript": "they're slow to make and they lock the whole talk into a script"}}
+{"delay": 0.9, "op": "block.update", "payload": {"id": "b_1", "data": {"title": "Nobody builds slides for 10 minutes", "bullets": ["decks are slow to make", "locks the talk into a script"], "accent": "slate"}}}
+{"delay": 0.25, "op": "canvas.focus", "payload": {"ids": ["b_1"], "padding": 100}}
+{"delay": 2.4, "op": "status", "payload": {"state": "thinking", "transcript": "we get from a sentence to pixels in about one and a half seconds"}}
+{"delay": 0.9, "op": "block.add", "payload": {"id": "b_2", "type": "stat", "x": 980, "y": -180, "w": 320, "h": 200, "enter": "pop", "data": {"value": "1.4s", "label": "sentence to pixels"}}}
+{"delay": 0.25, "op": "canvas.focus", "payload": {"ids": [], "padding": 80}}
+{"delay": 2.8, "op": "status", "payload": {"state": "thinking", "transcript": "capture is forty mils, the model is about nine hundred, render one fifty"}}
+{"delay": 0.9, "op": "block.add", "payload": {"id": "b_3", "type": "chart", "x": -1420, "y": -180, "w": 460, "h": 300, "enter": "fade", "data": {"title": "Where the time goes", "kind": "bar", "unit": "ms", "series": [{"label": "capture", "value": 40}, {"label": "model", "value": 900}]}}}
+{"delay": 0.25, "op": "canvas.focus", "payload": {"ids": [], "padding": 80}}
+{"delay": 2.2, "op": "status", "payload": {"state": "thinking", "transcript": "and the render is another one hundred and fifty on top of that"}}
+{"delay": 0.9, "op": "block.update", "payload": {"id": "b_3", "data": {"title": "Where the time goes", "kind": "bar", "unit": "ms", "series": [{"label": "capture", "value": 40}, {"label": "model", "value": 900}, {"label": "render", "value": 150}]}}}
+{"delay": 0.25, "op": "canvas.focus", "payload": {"ids": ["b_3"], "padding": 100}}
+{"delay": 2.7, "op": "status", "payload": {"state": "thinking", "transcript": "the whole loop is just mic, model, canvas"}}
+{"delay": 0.9, "op": "block.add", "payload": {"id": "b_4", "type": "diagram", "x": 2180, "y": -180, "w": 560, "h": 320, "enter": "draw", "data": {"title": "The loop", "mermaid": "graph LR\n  M[mic] --> G[Gemini Live]\n  G --> C[canvas ops]\n  C --> S[screen]"}}}
+{"delay": 0.25, "op": "canvas.focus", "payload": {"ids": [], "padding": 80}}
+{"delay": 3.0, "op": "status", "payload": {"state": "thinking", "transcript": "actually I measured it again this morning, it's more like one point two"}}
+{"delay": 0.9, "op": "block.add", "payload": {"id": "b_5", "type": "stat", "x": 1360, "y": -180, "w": 320, "h": 200, "enter": "pop", "data": {"value": "1.2s", "label": "remeasured this morning"}}}
+{"delay": 0.25, "op": "link.add", "payload": {"id": "l_1", "from": "b_2", "to": "b_5", "label": "vs", "style": "arrow"}}
+{"delay": 0.25, "op": "canvas.focus", "payload": {"ids": ["b_2", "b_5"], "padding": 100}}
+{"delay": 2.9, "op": "status", "payload": {"state": "thinking", "transcript": "I'm at NG Greenhouse and I want to get to Luckin Coffee"}}
+{"delay": 0.9, "op": "block.add", "payload": {"id": "b_6", "type": "map", "x": -2620, "y": -180, "w": 420, "h": 320, "enter": "pop", "data": {"from": "NG Greenhouse", "to": "Luckin Coffee", "mode": "walking", "duration": "8 min", "distance": "650 m", "polyline": [[0, 0], [30, 60], [80, 70], [120, 140], [190, 160]]}}}
+{"delay": 0.25, "op": "canvas.focus", "payload": {"ids": [], "padding": 80}}
+{"delay": 1.5, "op": "status", "payload": {"state": "listening"}}

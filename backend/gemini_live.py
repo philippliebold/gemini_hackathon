@@ -2,17 +2,34 @@
 
 Model note: `gemini-3.7-flash` is the stable workhorse but is NOT a Live API
 model. Audio streaming goes through a *-live-* model (see config.live_model).
-Use 3.7-flash for async enrichment off the hot path if we need it.
+3.7-flash does the async enrichment off the hot path — see memory.py.
+
+CONTEXT MODEL — two layers, deliberately:
+  * The Live session is PRIMARY. It holds the verbatim audio, the transcripts and
+    the full tool history. Context-window compression keeps it alive through a long
+    talk; session resumption reconnects it without losing that history.
+  * canvas.py + memory.py are the DURABLE net. They tell the model what is on screen
+    (via the manifest riding back in every tool response) and they rebuild its
+    understanding if the session dies anyway.
+
+We never re-prompt with raw transcript on the hot path. The manifest is small, and it
+travels in the FunctionResponse we already had to send.
 """
 import asyncio
+import time
 from collections.abc import Callable
 
 from google import genai
 from google.genai import types
 
+import canvas
 import ops
 import tools
 from config import CFG
+
+HEARTBEAT_S = 25.0        # top up canvas context if no tool has fired this long
+TRIGGER_TOKENS = 16000    # compress the session before it hits the wall
+TARGET_TOKENS = 8000
 
 SYSTEM_INSTRUCTION = """\
 You are a silent co-presenter. A human is giving a live talk to an audience.
@@ -20,25 +37,40 @@ You control the screen behind them. You never speak and never address anyone.
 
 Your only output is tool calls that put things on a shared canvas.
 
-WHEN TO DRAW — this is the whole job:
-- Draw when a sentence contains something a slide would have carried: a claim
-  worth anchoring, a real number, a system or flow, a comparison, a place.
-- Stay silent otherwise. Filler, throat-clearing, transitions, "so", "right",
-  "as I was saying" — draw nothing. An empty screen is better than noise.
-- At most one tool call per sentence. Never restate what is already on screen.
-- Aim for roughly one visual every 15-20 seconds of speech. Fewer, bigger, better.
+WHEN TO DRAW — half the job:
+- Draw when a sentence carries something a slide would have carried: a claim worth
+  anchoring, a real number, a system or flow, a comparison, a place.
+- Stay silent otherwise. Filler, throat-clearing, transitions — "so", "right",
+  "as I was saying" — draw nothing. An empty screen beats a noisy one.
+- At most one tool call per sentence.
+- Roughly one NEW visual every 15-20 seconds of speech. Fewer, bigger, better.
+
+THE BOARD EVOLVES — the other half, and the one that makes this feel alive:
+Every visual belongs to a topic `key`. Every tool result hands you a CANVAS list of
+what is on screen right now, each entry with its key. That list is the truth. Read it
+before you draw.
+- Speaker adds detail to something already up there → call the SAME tool with the
+  SAME key. The block grows in place. Updating is CHEAP. Prefer it.
+- Speaker contradicts or corrects something already up there → new key, and set
+  `revises` to the old key. Both stay visible, side by side. NEVER silently
+  overwrite a number a human said out loud.
+- Speaker opens a genuinely new topic → new key.
+- Never create a second block about a topic that already has one. Adding is
+  EXPENSIVE.
+- A key names the SUBJECT, not the sentence: 'pricing', 'latency', 'pipeline'.
+  Reuse it exactly, character for character.
 
 CONTENT RULES:
 - Never invent a number, a name, or a fact the speaker did not say.
 - Titles are 3-8 words. Bullets are under 8 words. No full sentences on screen.
 - The audience reads this from across a room. Terse wins.
 
-You are told the ids of blocks already on the canvas. Use connect_blocks to
-relate a new idea to an existing one when the speaker links them explicitly.
+Use connect_blocks with block ids from the CANVAS list to relate two ideas when the
+speaker explicitly links them. Never guess an id.
 """
 
 
-def build_config() -> types.LiveConnectConfig:
+def build_config(handle: str | None = None) -> types.LiveConnectConfig:
     return types.LiveConnectConfig(
         response_modalities=["TEXT"],           # we want tool calls, not speech
         system_instruction=types.Content(
@@ -53,17 +85,47 @@ def build_config() -> types.LiveConnectConfig:
                 "prefix_padding_ms": 60,
             }
         },
+        # Keep the primary context layer alive through a long talk instead of
+        # letting it hit the window and die.
+        context_window_compression=types.ContextWindowCompressionConfig(
+            trigger_tokens=TRIGGER_TOKENS,
+            sliding_window=types.SlidingWindow(target_tokens=TARGET_TOKENS),
+        ),
+        # Reconnect into the SAME conversation rather than a blank one.
+        session_resumption=types.SessionResumptionConfig(handle=handle),
     )
 
 
-async def run(audio_q: asyncio.Queue, broadcast: Callable[[dict], None]):
-    """Own the Live session for the whole talk. `broadcast(frame)` is sync."""
+async def run(audio_q: asyncio.Queue, broadcast: Callable[[dict], None],
+              memory=None, session_state: dict | None = None):
+    """Own the Live session for the whole talk. `broadcast(frame)` is sync.
+
+    `session_state` is a dict owned by the caller and reused across reconnects; we
+    keep the resumption handle in it so a dropped session comes back with its
+    history instead of amnesia.
+    """
+    state = session_state if session_state is not None else {}
     client = genai.Client(api_key=CFG.api_key)
-    cfg = build_config()
+    cfg = build_config(state.get("handle"))
+    last_tool = time.time()
 
     async with client.aio.live.connect(model=CFG.live_model, config=cfg) as session:
         broadcast(ops.status("listening"))
-        print(f"[live] connected to {CFG.live_model}")
+        resumed = " (resumed)" if state.get("handle") else ""
+        print(f"[live] connected to {CFG.live_model}{resumed}")
+
+        # If the board already has blocks, this is a reconnect: the canvas outlived
+        # the session. Hand the model the record before it hears another word, or it
+        # will happily duplicate everything already on screen.
+        if canvas.BLOCKS:
+            brief = canvas.manifest_text()
+            if memory is not None:
+                brief = f"{memory.resume_brief()}\n\n{brief}"
+            await session.send_client_content(
+                turns=[types.Content(role="user", parts=[types.Part(text=brief)])],
+                turn_complete=False,
+            )
+            print(f"[live] re-briefed on {len(canvas.BLOCKS)} live blocks")
 
         async def pump_audio():
             while True:
@@ -72,19 +134,55 @@ async def run(audio_q: asyncio.Queue, broadcast: Callable[[dict], None]):
                     audio=types.Blob(data=chunk, mime_type="audio/pcm;rate=16000")
                 )
 
+        def _mark_tool():
+            nonlocal last_tool
+            last_tool = time.time()
+
+        async def pump_heartbeat():
+            """Top up canvas context when the model has been quiet a while.
+
+            Cheap (a few hundred tokens) and it stops the model drifting away from
+            what is actually on screen during a long stretch of no tool calls.
+            """
+            while True:
+                await asyncio.sleep(5)
+                if not canvas.BLOCKS or time.time() - last_tool < HEARTBEAT_S:
+                    continue
+                await session.send_client_content(
+                    turns=[types.Content(role="user", parts=[
+                        types.Part(text=canvas.manifest_text())])],
+                    turn_complete=False,
+                )
+                _mark_tool()
+
         async def pump_responses():
             async for response in session.receive():
                 sc = response.server_content
                 if sc and sc.input_transcription and sc.input_transcription.text:
-                    broadcast(ops.status("listening",
-                                         sc.input_transcription.text))
+                    text = sc.input_transcription.text
+                    broadcast(ops.status("listening", text))
+                    if memory is not None:
+                        memory.add_utterance(text)   # feeds the durable layer only
+
+                # Keep the resumption handle fresh so a drop is recoverable.
+                if response.session_resumption_update:
+                    upd = response.session_resumption_update
+                    if upd.resumable and upd.new_handle:
+                        state["handle"] = upd.new_handle
+
+                if response.go_away:
+                    print(f"[live] server going away in {response.go_away.time_left}; "
+                          f"will resume on the stored handle")
 
                 if response.tool_call:
+                    _mark_tool()
                     broadcast(ops.status("drawing"))
                     replies = []
                     for fc in response.tool_call.function_calls:
-                        print(f"[live] tool {fc.name} {fc.args}")
                         frames, result = tools.dispatch(fc.name, dict(fc.args or {}))
+                        print(f"[live] tool {fc.name} "
+                              f"key={ (fc.args or {}).get('key') } "
+                              f"-> {result.get('action') or result.get('skipped') or result.get('error')}")
                         for f in frames:
                             broadcast(f)
                         replies.append(types.FunctionResponse(
@@ -93,4 +191,4 @@ async def run(audio_q: asyncio.Queue, broadcast: Callable[[dict], None]):
                         await session.send_tool_response(function_responses=replies)
                     broadcast(ops.status("listening"))
 
-        await asyncio.gather(pump_audio(), pump_responses())
+        await asyncio.gather(pump_audio(), pump_responses(), pump_heartbeat())

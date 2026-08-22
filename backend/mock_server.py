@@ -6,6 +6,7 @@ ever waiting on the Gemini side.
     python backend/mock_server.py            # loop the demo script
     python backend/mock_server.py --once     # play once and hold
     python backend/mock_server.py --speed 2  # twice as fast
+    python backend/mock_server.py --fixture evolve   # cards that GROW, not just appear
 """
 import argparse
 import asyncio
@@ -17,11 +18,22 @@ import ops
 import server
 from config import CFG
 
-FIXTURE = Path(__file__).resolve().parent.parent / "shared" / "fixtures" / "demo.jsonl"
+FIXTURES = Path(__file__).resolve().parent.parent / "shared" / "fixtures"
+FIXTURE = FIXTURES / "demo.jsonl"
 
 
-async def play(once: bool, speed: float):
-    lines = [json.loads(l) for l in FIXTURE.read_text().splitlines() if l.strip()]
+def resolve_fixture(name: str) -> Path:
+    p = Path(name)
+    for cand in (p, FIXTURES / name, FIXTURES / f"{name}.jsonl"):
+        if cand.is_file():
+            return cand
+    raise SystemExit(f"no such fixture: {name}. Available: "
+                     + ", ".join(sorted(f.stem for f in FIXTURES.glob("*.jsonl"))))
+
+
+async def play(once: bool, speed: float, fixture: Path = FIXTURE):
+    lines = [json.loads(l) for l in fixture.read_text().splitlines() if l.strip()]
+    print(f"[mock] playing {fixture.name} ({len(lines)} frames)")
     while True:
         for entry in lines:
             await asyncio.sleep(entry.get("delay", 1.0) / speed)
@@ -37,13 +49,17 @@ async def play(once: bool, speed: float):
 
 
 async def main(args):
-    await asyncio.gather(server.serve(), play(args.once, args.speed))
+    fixture = resolve_fixture(args.fixture) if args.fixture else FIXTURE
+    await asyncio.gather(server.serve(), play(args.once, args.speed, fixture))
 
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--once", action="store_true")
     p.add_argument("--speed", type=float, default=1.0)
+    p.add_argument("--fixture", default=None,
+                   help="fixture name or path (default: demo). Try 'evolve' to see "
+                        "block.update frames — cards that grow instead of duplicate.")
     try:
         asyncio.run(main(p.parse_args()))
     except KeyboardInterrupt:
