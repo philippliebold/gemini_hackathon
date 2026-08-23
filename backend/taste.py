@@ -45,18 +45,22 @@ One tool call at most per line.
 # Which shape. Ordered: the earlier options are lighter and read from further away.
 FORM = """\
 FORM -- pick the lightest thing that carries the meaning:
-1. show_hero (an emoji + 2-5 words) is the DEFAULT. Reach for it first, always.
-2. A number said aloud -> show_stat. Several numbers -> show_chart.
-3. A relationship or formula -> show_math.
-4. A REAL, nameable thing (a Porsche 911, the Eiffel Tower, a blue whale)
+1. A REAL, nameable thing (a Porsche 911, the Eiffel Tower, a blue whale)
    -> show_photo. It searches for an actual photograph.
+2. A number said aloud -> show_stat. Several numbers -> show_chart.
+3. Two places, or a route between them -> show_route.
+4. A relationship, system, or formula -> show_diagram / show_math.
 5. An imagined or non-existent scene -> show_image (generated).
-6. A route between two places -> show_route.
+6. show_hero = 1-5 words, NO emoji. Use it when the point is a short claim
+   that is not a number, a named thing, or a place. Never decorate it.
 7. show_concept (bullets) is the LAST resort, only when a list is genuinely
    the point. Never more than 3 bullets, never a full sentence.
 
 Prose is failure. If you are about to write a sentence on screen, you have
-picked the wrong tool -- choose an emoji, a number, or a picture instead.
+picked the wrong tool -- choose a photograph, a number, or a short hero line.
+
+Never use decorative emoji. Emoji belong only on show_summary tiles, and
+even there prefer a number or a short label.
 
 END OF TALK: when the speaker is closing the WHOLE talk -- "to sum up", "in
 summary", "in conclusion", "to wrap up" -- call show_summary with 4-9 tiles
@@ -106,6 +110,7 @@ CONTENT RULES:
 - Never invent a number, a name or a fact that was not said.
 - Titles 3-8 words. Bullets under 8 words. No sentences on screen.
 - The audience reads this from ten metres away. Terse wins.
+- No decorative emoji on heroes, concepts, stats, or captions.
 """
 
 CONNECT = """\

@@ -20,10 +20,10 @@
     startOnLoad: false, securityLevel: "loose", theme: "base",
     fontFamily: "Google Sans, Roboto, sans-serif",
     themeVariables: {
-      primaryColor: "rgba(111,168,255,.18)", primaryTextColor: "#EAF2FF",
-      primaryBorderColor: "#6FA8FF", lineColor: "#8FB4E8",
-      secondaryColor: "rgba(255,122,110,.18)", tertiaryColor: "rgba(91,208,124,.18)",
-      background: "transparent", mainBkg: "rgba(111,168,255,.18)", fontSize: "16px"
+      primaryColor: "rgba(232,162,58,.16)", primaryTextColor: "#F3EEE4",
+      primaryBorderColor: "#E8A23A", lineColor: "#8B9BB4",
+      secondaryColor: "rgba(139,155,180,.16)", tertiaryColor: "rgba(243,238,228,.08)",
+      background: "transparent", mainBkg: "rgba(232,162,58,.16)", fontSize: "16px"
     }
   });
   window.mermaid = mermaid;
@@ -42,11 +42,20 @@
   <!-- where scenes live -->
   <div id="stage"><div id="slots" data-n="1"></div></div>
 
-  <!-- nothing said yet -->
-  <div id="idle"><span class="core-dots"><i></i><i></i><i></i><i></i></span></div>
+  <!-- coaching: what to do before anything is on stage -->
+  <div id="idle">
+    <div class="coach" id="coach">
+      <div class="coach-kicker" id="coach-kicker"></div>
+      <div class="coach-title" id="coach-title"></div>
+      <div class="coach-rule" id="coach-rule" hidden></div>
+      <div class="coach-body" id="coach-body"></div>
+      <div class="coach-actions" id="coach-actions"></div>
+    </div>
+  </div>
 
   <!-- source: live mic vs self-contained demo replay -->
-  <div id="src-toggle" class="src-toggle">
+  <div id="src-toggle" class="src-toggle" title="Live needs the backend. Demo plays a recorded talk.">
+    <span class="src-label">Source</span>
     <button data-mode="live"><span class="msym">graphic_eq</span>Live</button>
     <button data-mode="demo"><span class="msym">play_circle</span>Demo</button>
   </div>
@@ -58,9 +67,6 @@
   </div>
 
   <div id="dock" class="dock">
-    <!-- The stop switch comes first because it is the control you reach for
-         under pressure: it halts transcription and every API call at once.
-         Play/pause semantics — the glyph is the action, not the state. -->
     <button id="listen-btn" class="dock-btn listen"
             title="Stop — halts transcription and every API call (L)">
       <span class="msym">pause</span><span id="listen-label">Stop</span>
@@ -68,39 +74,41 @@
     <div class="dock-sep"></div>
     <div class="dock-row" id="mic-row"></div>
     <div class="dock-sep"></div>
-    <button id="add-mic" class="dock-btn" title="Add a microphone (up to 4)">
-      <span class="msym">add</span><span>Mic</span>
+    <button id="more-btn" class="dock-btn" title="More controls">
+      <span class="msym">more_horiz</span><span>More</span>
     </button>
-    <button id="spk-btn" class="dock-btn"
+  </div>
+
+  <div id="more" class="more-menu" hidden>
+    <button id="add-mic" class="more-item" title="Pick this Mac's microphone (M)">
+      <span class="msym">mic</span><span>Mac mic</span>
+    </button>
+    <button id="phone-btn" class="more-item" title="Join a phone as a microphone">
+      <span class="msym">qr_code_2</span><span>Phone</span>
+    </button>
+    <button id="spk-btn" class="more-item"
             title="Play the phones through this Mac's output — right-click to pick an output (S)">
       <span class="msym">volume_off</span><span id="spk-label">Speaker</span>
     </button>
-    <button id="phone-btn" class="dock-btn" title="Join a phone as a microphone">
-      <span class="msym">qr_code_2</span><span>Phone</span>
-    </button>
-    <div class="dock-sep"></div>
-    <button id="notes-btn" class="dock-btn" title="The running record of this talk (N)">
+    <button id="notes-btn" class="more-item" title="The running record of this talk (N)">
       <span class="msym">sticky_note_2</span><span>Notes</span>
     </button>
-    <button id="reset-btn" class="dock-btn ghost"
-            title="Clear the board AND the running record — start the talk over">
-      <span class="msym">restart_alt</span>
+    <div class="more-sep"></div>
+    <button id="clear-btn" class="more-item" title="Clear the board. Keeps the record (C)">
+      <span class="msym">ink_eraser</span><span>Clear the board</span>
     </button>
-    <button id="help-btn" class="dock-btn ghost" title="Controls (?)">
-      <span class="msym">help</span>
+    <button id="reset-btn" class="more-item"
+            title="Clear the board and the record — start the talk over">
+      <span class="msym">restart_alt</span><span>Start the talk over</span>
     </button>
-    <button id="brain-btn" class="dock-btn ghost"
-            title="Let gemini-3.7-flash decide what to draw, instead of the live ear">
-      <span class="msym">neurology</span>
+    <button id="full-btn" class="more-item" title="Fullscreen (F)">
+      <span class="msym">fullscreen</span><span>Fullscreen</span>
     </button>
-    <button id="clear-btn" class="dock-btn" title="Clear (C)">
-      <span class="msym">ink_eraser</span>
+    <button id="hide-btn" class="more-item" title="Hide the controls (H brings them back)">
+      <span class="msym">visibility_off</span><span>Hide controls</span>
     </button>
-    <button id="full-btn" class="dock-btn" title="Fullscreen (F)">
-      <span class="msym">fullscreen</span>
-    </button>
-    <button id="hide-btn" class="dock-btn" title="Hide the controls (H brings them back)">
-      <span class="msym">visibility_off</span>
+    <button id="help-btn" class="more-item" title="How a talk works (?)">
+      <span class="msym">help</span><span>How a talk works</span>
     </button>
   </div>
 
@@ -112,29 +120,21 @@
   </button>
 
   <div id="help" class="picker"><div class="picker-card help-card">
-    <div class="picker-title">Controls</div>
-    <div class="help-grid">
-      <kbd>L</kbd><div><b>Stop / Start</b><span>The kill switch, first button in the
-        dock. Stop halts transcription and every API call, and cancels any already in
-        flight. Nothing bills while stopped.</span></div>
-      <kbd>S</kbd><div><b>Speaker</b><span>Play the phones through this Mac's output.
-        Right-click the button to pick which output.</span></div>
-      <kbd>M</kbd><div><b>Mac input</b><span>Choose this Mac's microphone, or turn it
-        off.</span></div>
-      <kbd>N</kbd><div><b>Notes</b><span>The running record — topics, numbers,
-        decisions, open questions.</span></div>
-      <kbd>C</kbd><div><b>Clear</b><span>Wipe the screen. Keeps the record.</span></div>
-      <kbd>H</kbd><div><b>Hide chrome</b><span>Strip the dock and status. What the
-        room should see.</span></div>
-      <kbd>F</kbd><div><b>Fullscreen</b></div>
-      <kbd>?</kbd><div><b>This panel</b></div>
-    </div>
-    <div class="help-note">
-      <b>Phone</b> — open the QR panel, scan, accept the certificate warning once,
-      then Go live. Up to four. Each phone has its own volume in the room (the slider
-      on its chip) and its own input level (on the phone).<br><br>
-      <b>Reset</b> clears the board <i>and</i> the record — use it between rehearsals
-      so a fresh take is genuinely fresh.
+    <div class="picker-title">How a talk works</div>
+    <ol class="help-steps">
+      <li><b>Start the backend</b> — or play the demo from the idle card.</li>
+      <li><b>Press Start</b> — the first button in the dock.</li>
+      <li><b>Talk</b> — the board draws the idea, not the sentence.</li>
+      <li><b>Stop</b> to halt billing. <b>Hide</b> when the room is watching.</li>
+    </ol>
+    <div class="help-keys">
+      <span><kbd>L</kbd> Start / Stop</span>
+      <span><kbd>M</kbd> Mac mic</span>
+      <span><kbd>N</kbd> Notes</span>
+      <span><kbd>C</kbd> Clear the board</span>
+      <span><kbd>H</kbd> Hide</span>
+      <span><kbd>F</kbd> Fullscreen</span>
+      <span><kbd>?</kbd> This panel</span>
     </div>
     <button id="help-close" class="picker-cancel">Done</button>
   </div></div>

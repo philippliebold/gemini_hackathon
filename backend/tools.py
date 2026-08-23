@@ -242,7 +242,7 @@ DECLARATIONS: list[dict[str, Any]] = [
                 "items": {
                     "type": "object",
                     "properties": {
-                        "emoji": {"type": "string", "description": "one emoji"},
+                        "emoji": {"type": "string", "description": "optional; prefer a number or label"},
                         "value": {"type": "string", "description": "optional figure"},
                         "label": {"type": "string", "description": "under 5 words"},
                     },
@@ -253,14 +253,12 @@ DECLARATIONS: list[dict[str, Any]] = [
     ),
     _decl(
         "show_hero",
-        "The DEFAULT way to put an idea on screen. One emoji plus 2-5 words. Use this "
-        "instead of show_concept whenever the point fits in a few words -- it reads from "
-        "the back of a room, a paragraph does not. Pick an emoji that carries the meaning "
-        "on its own. Prefer this over every other text tool.",
+        "A short claim in 1-5 words. NO emoji. Use this when the point is not a named "
+        "real thing (show_photo), a number (show_stat), two places (show_route), or a "
+        "relationship (show_diagram / show_math). Prefer those tools first. Never write "
+        "a sentence.",
         {
-            "emoji": {"type": "string",
-                      "description": "ONE emoji that carries the idea, e.g. 'GG' bridge, rocket, warning"},
-            "title": {"type": "string", "description": "2-5 words. Never a sentence."},
+            "title": {"type": "string", "description": "1-5 words. Never a sentence. No emoji."},
             "sub": {"type": "string", "description": "Optional: a few words of detail, e.g. '1937 - 2,737 m'"},
             "big": {"type": "boolean", "description": "true for the single most important idea on screen"},
         },
@@ -280,10 +278,9 @@ DECLARATIONS: list[dict[str, Any]] = [
     ),
     _decl(
         "show_concept",
-        "Put a concept card on the canvas. Use when the speaker makes a point worth "
-        "anchoring: a claim, a definition, a list of reasons. Title must be 3-8 words. "
-        "Max 4 bullets, each under 8 words. Reuse the key to append a bullet as the "
-        "speaker develops the same point.",
+        "LAST RESORT. A list only when a list is genuinely the point. Title 3-8 words. "
+        "Max 3 bullets, each a fragment under 8 words — never a full sentence. Reuse "
+        "the key to append a bullet as the speaker develops the same point.",
         {
             "title": {"type": "string"},
             "bullets": {"type": "array", "items": {"type": "string"}},
@@ -543,7 +540,7 @@ def tool_clear_canvas(**_):
 def tool_show_hero(key: str, title: str | None = None, emoji: str | None = None,
                    sub: str | None = None, big: bool = False,
                    revises: str | None = None, **_):
-    return _emit("hero", key, {"title": title, "emoji": emoji, "sub": sub,
+    return _emit("hero", key, {"title": title, "sub": sub,
                                "big": bool(big)}, revises,
                  needs=("title",), w=380, h=200, enter="pop")
 

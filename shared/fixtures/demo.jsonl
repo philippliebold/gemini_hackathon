@@ -1,10 +1,10 @@
 {"delay": 0.0, "op": "canvas.clear", "payload": {}}
 {"delay": 0.0, "op": "status", "payload": {"state": "listening"}}
 {"delay": 0.64, "op": "status", "payload": {"state": "thinking", "transcript": "so nobody actually wants to build slides for a ten minute talk"}}
-{"delay": 0.55, "op": "block.add", "payload": {"id": "b_1", "type": "hero", "x": -220, "y": -180, "w": 380, "h": 200, "enter": "pop", "data": {"title": "Nobody Wants Slides", "emoji": "🚫", "big": true}}}
+{"delay": 0.55, "op": "block.add", "payload": {"id": "b_1", "type": "hero", "x": -220, "y": -180, "w": 380, "h": 200, "enter": "pop", "data": {"title": "Nobody Wants Slides", "big": true}}}
 {"delay": 0.0, "op": "canvas.focus", "payload": {"ids": [], "padding": 80}}
 {"delay": 2.16, "op": "status", "payload": {"state": "thinking", "transcript": "the screen should just build itself while you speak"}}
-{"delay": 0.69, "op": "block.add", "payload": {"id": "b_2", "type": "hero", "x": 980, "y": -180, "w": 380, "h": 200, "enter": "pop", "data": {"title": "Automatic Visuals", "emoji": "💡", "sub": "Slides build themselves", "big": false}}}
+{"delay": 0.69, "op": "block.add", "payload": {"id": "b_2", "type": "hero", "x": 980, "y": -180, "w": 380, "h": 200, "enter": "pop", "data": {"title": "The screen builds itself", "sub": "While you talk", "big": false}}}
 {"delay": 0.0, "op": "canvas.focus", "payload": {"ids": [], "padding": 80}}
 {"delay": 2.91, "op": "status", "payload": {"state": "thinking", "transcript": "we get from a spoken sentence to pixels in about one point four seconds"}}
 {"delay": 0.56, "op": "block.add", "payload": {"id": "b_3", "type": "stat", "x": -1420, "y": -180, "w": 320, "h": 200, "enter": "pop", "data": {"value": "1.4s", "label": "speech to pixels"}}}
@@ -31,7 +31,7 @@
 {"delay": 0.0, "op": "canvas.focus", "payload": {"ids": [], "padding": 80}}
 {"delay": 1.56, "op": "block.update", "payload": {"id": "b_9", "data": {"duration": "4 min", "distance": "290 m", "polyline": [[1.29886, 103.78694], [1.29879, 103.78714], [1.29865, 103.78723], [1.29861, 103.78732], [1.29863, 103.7875], [1.29844, 103.78795], [1.29845, 103.78805], [1.29836, 103.78808], [1.29835, 103.78801], [1.29832, 103.7881], [1.29834, 103.78811], [1.29829, 103.78822], [1.29827, 103.78821], [1.29822, 103.78833], [1.29827, 103.78829], [1.29829, 103.78834], [1.29808, 103.7888], [1.29788, 103.78926]]}}}
 {"delay": 0.32, "op": "status", "payload": {"state": "thinking", "transcript": "okay so to sum up everything we covered today"}}
-{"delay": 0.74, "op": "block.add", "payload": {"id": "b_10", "type": "summary", "x": -5020, "y": -180, "w": 1200, "h": 620, "enter": "fade", "data": {"title": "Presentation Summary", "items": [{"emoji": "🚫", "value": null, "label": "No manual slides"}, {"emoji": "⚡", "value": null, "label": "Automatic screen build"}, {"emoji": "⏱️", "value": null, "label": "1.4s total latency"}, {"emoji": "📈", "value": null, "label": "Weekly usage grew"}]}}}
+{"delay": 0.74, "op": "block.add", "payload": {"id": "b_10", "type": "summary", "x": -5020, "y": -180, "w": 1200, "h": 620, "enter": "fade", "data": {"title": "In summary", "items": [{"label": "No slides in advance"}, {"label": "The board draws itself"}, {"value": "1.4s", "label": "Speech to pixels"}, {"label": "Weekly usage grew"}]}}}
 {"delay": 0.0, "op": "canvas.focus", "payload": {"ids": [], "padding": 80}}
 {"delay": 2.88, "op": "block.update", "payload": {"id": "b_7", "data": {"src": "./assets/generated-0.jpg"}}}
 {"delay": 13.0, "op": "status", "payload": {"state": "listening"}}

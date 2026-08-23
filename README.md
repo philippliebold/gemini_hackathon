@@ -8,61 +8,42 @@ backend↔frontend interface, and [PLAN.md](PLAN.md) for who does what today.
 
 ---
 
-## Run it in 60 seconds (no API key needed)
+## Start a talk
 
-Two terminals.
+Three steps. The stage itself will say the same thing if something is missing.
 
-**Terminal 1 — fake backend, replays a scripted demo:**
+**1. Start the backend**
+```bash
+cp .env.example .env        # put your GEMINI_API_KEY in it (billing must be on)
+source .venv/bin/activate
+python backend/main.py --check      # if nothing appears, this is why
+python -u backend/main.py
+```
+
+**2. Open the stage** — `cd frontend && python3 -m http.server 5173`, then
+<http://localhost:5173>. Leave the toggle on **Live**.
+
+**3. Press Start, then talk.** Name a real thing, a number, or two places.
+The board draws the idea, not the sentence. **Stop** halts billing.
+
+If the stage says the backend is not running, you skipped step 1. If a named
+failure appears (missing key, Whisper not downloaded, no mic), run `--check`
+or open <http://localhost:5173/console.html> on the laptop.
+
+**No key yet?** Switch the toggle to **Demo**. It replays a recorded talk in
+the browser and needs no backend.
+
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r backend/requirements.txt
-python backend/mock_server.py
-```
-
-**Terminal 2 — the display:**
-```bash
 cd frontend && python3 -m http.server 5173
 ```
 
-Open <http://localhost:5173>. Blocks should start appearing.
+`-u` matters if you redirect the log to a file: Python block-buffers stdout
+there. Straight to a terminal you can leave it off.
 
-That's the whole frontend development loop. You never need the Gemini side.
-
-## Run it for real
-
-```bash
-cp .env.example .env        # put your GEMINI_API_KEY in it
-source .venv/bin/activate
-python backend/main.py --check      # is this machine and this key ready?
-python backend/main.py --devices    # find your mic
-python -u backend/main.py           # then talk
-```
-
-**Run `--check` before every rehearsal.** It takes five seconds and tells you which
-of the six things that have each cost a real run is wrong this time: a key with no
-billing, a Whisper model that was never downloaded, a microphone the OS never
-granted permission to, a port still held by a backend from twenty minutes ago. All
-of those look identical from the stage — a screen that does nothing.
-
-```
-  ✓ PASS  GEMINI_API_KEY                      set (53 chars)
-  ✓ PASS  Gemini text model                   gemini-3.7-flash (primary) in 1.4s
-  ✓ PASS  Whisper (the default ear)           whisper-small-mlx loaded in 2.6s
-  ✓ PASS  Audio input devices                 5 found, default: AirPods Pro
-  ! WARN  WebSocket port                      127.0.0.1:8765 in use — is a backend already running?
-```
-
-Frontend is the same: `cd frontend && python3 -m http.server 5173`. Open
-<http://localhost:5173> and make sure the toggle top-right says **Live**, not Demo —
-in Demo mode the socket is closed and the dock does nothing.
-
-`-u` matters if you redirect the log to a file: Python block-buffers stdout there,
-so `[ear]` and `[brain]` lines arrive minutes late without it. Straight to a
-terminal it is line-buffered and you can leave `-u` off.
-
-The default ear is **local Whisper**, not the Live API — see "Two ears" below. So
-`gemini-3.7-flash` is always the thing deciding what to draw, and the brain is on
-from the first sentence.
+The default ear is **local Whisper**, not the Live API — see "Two ears" below.
+`gemini-3.7-flash` decides what to draw from the first sentence.
 
 ## The console: what is happening, and why it stayed quiet
 
@@ -103,22 +84,24 @@ block: if you want to see what the audience sees, look at the audience's screen.
 
 ## Controls
 
-The dock lives at the bottom of the display. It auto-hides after 3s of stillness;
-any mouse movement brings it back, and `H` strips it completely for the room.
+The dock lives at the bottom of the display. Three controls stay visible:
+**Start / Stop**, the active mic, and **More**. It auto-hides after a few
+seconds of stillness; any mouse movement brings it back. `H` strips it for
+the room.
 
 | | Does |
 |---|---|
-| **⏸ Stop / ▶ Start** (`L`) | The kill switch, and the first button in the dock. Halts transcription, the brain and the summariser, and **cancels calls already in flight**. Nothing bills while stopped. Green when live, red with a `MIC STOPPED` banner when not. |
-| **Mic** (`M`) | Pick this Mac's input, or turn it off. Turning it off closes the device; Stop only discards its audio. |
-| **Speaker** (`S`) | Play the phones through this Mac's output. Right-click to choose which output. |
-| **Phone** | QR + join URL for phone mics, and the **Sensitivity** slider — the live level meter sits behind the handle, so you can set the gate while talking. |
-| **Notes** (`N`) | The running record: topics, numbers, decisions, open questions. |
-| **Reset** | Clears the board *and* the record. Use it between rehearsals. |
-| **Brain** | Hands the drawing decision to `gemini-3.7-flash`. Locked on with local ears, because nothing else can draw. |
-| **Clear** (`C`) · **Fullscreen** (`F`) · **Hide** (`H`) · **Help** (`?`) | |
+| **Start / Stop** (`L`) | The kill switch. Halts transcription and every API call, including ones already in flight. Nothing bills while stopped. |
+| **More → Mac mic** (`M`) | Pick this Mac's input, or turn it off. |
+| **More → Speaker** (`S`) | Play the phones through this Mac's output. Right-click to choose which output. |
+| **More → Phone** | QR + join URL for phone mics, and the Sensitivity slider. |
+| **More → Notes** (`N`) | The running record: topics, numbers, decisions, open questions. |
+| **More → Clear the board** (`C`) | Wipe the screen. Keeps the record. |
+| **More → Start the talk over** | Clears the board *and* the record. Use it between rehearsals. |
+| **Fullscreen** (`F`) · **Hide** (`H`) · **How a talk works** (`?`) | |
 
-`Escape` closes any open panel and un-hides the chrome. `?` lists all of it on
-screen, so nobody has to read this table on stage.
+`?` opens the four-step card. First visit, it opens once on its own.
+`Escape` closes any open panel and un-hides the chrome.
 
 ## Layout
 

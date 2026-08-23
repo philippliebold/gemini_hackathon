@@ -20,6 +20,19 @@ const el = {
   idle:    document.getElementById("idle"),
   dots:    document.getElementById("dots"),
   caption: document.getElementById("caption"),
+  coach:   document.getElementById("coach"),
+  kicker:  document.getElementById("coach-kicker"),
+  title:   document.getElementById("coach-title"),
+  rule:    document.getElementById("coach-rule"),
+  body:    document.getElementById("coach-body"),
+  actions: document.getElementById("coach-actions"),
+};
+
+/* Connection + listen + health drive the idle card. A scene on stage hides it. */
+const coach = {
+  connected: false,
+  listening: true,
+  health: null,
 };
 
 const live = new Map();      // id -> {id, node, payload, timer}
@@ -44,7 +57,6 @@ function words(text, delay = 0, step = 0.055) {
 
 const SCENE = {
   hero: (d) => `
-    ${d.emoji ? `<div class="t-emoji">${esc(d.emoji)}</div>` : ""}
     <div class="t-hero ${String(d.title || "").length > 22 ? "tight" : ""}">
       ${words(d.title, .12)}
     </div>
@@ -94,7 +106,7 @@ const SCENE = {
     </div>
     ${(d.duration || d.distance) ? `
       <div class="t-sub" style="margin-top:1.6vh">
-        <b style="color:#F4F8FF">${esc(d.duration || "")}</b>
+        <b style="color:var(--paper)">${esc(d.duration || "")}</b>
         &nbsp;·&nbsp;${esc(d.distance || "")} ${esc(d.mode || "")}
       </div>` : d.failed
       ? `<div class="asset-failed" style="margin-top:1.6vh">${esc(d.failed)}</div>`
@@ -137,7 +149,6 @@ const SCENE = {
     <div class="sum-grid" style="--cols:${cols}">
       ${items.map((it, i) => `
         <div class="sum-tile" style="animation-delay:${(.25 + i * .09).toFixed(2)}s">
-          ${it.emoji ? `<div class="sum-emoji">${esc(it.emoji)}</div>` : ""}
           ${it.value ? `<div class="sum-value">${esc(it.value)}</div>` : ""}
           <div class="sum-label">${esc(it.label || "")}</div>
         </div>`).join("")}
@@ -184,7 +195,7 @@ function relayout() {
     const s = live.get(id);
     s.node.classList.toggle("recede", i !== ids.length - 1 && ids.length > 1);
   });
-  el.idle.classList.toggle("gone", live.size > 0);
+  renderCoach();
 }
 
 function addScene(p) {
@@ -258,20 +269,20 @@ let themed = false;
 function echartsTheme() {
   if (themed || !window.echarts) return themed;
   echarts.registerTheme("stage", {
-    color: ["#6FA8FF", "#FF7A6E", "#FFD24D", "#5BD07C"],
+    color: ["#E8A23A", "#F3EEE4", "#8B9BB4", "#C4A574"],
     backgroundColor: "transparent",
     textStyle: { fontFamily: "Google Sans, Roboto, sans-serif",
-                 fontSize: 15, color: "#B9D0F0" },
+                 fontSize: 15, color: "#8B9BB4" },
   });
   themed = true;
   return true;
 }
 
 const AX = {
-  axisLine: { lineStyle: { color: "rgba(255,255,255,.22)" } },
+  axisLine: { lineStyle: { color: "rgba(243,238,228,.22)" } },
   axisTick: { show: false },
-  axisLabel: { color: "#B9D0F0", fontSize: 15 },
-  splitLine: { lineStyle: { color: "rgba(255,255,255,.08)" } },
+  axisLabel: { color: "#8B9BB4", fontSize: 15 },
+  splitLine: { lineStyle: { color: "rgba(243,238,228,.08)" } },
 };
 
 function chartSpec(d) {
@@ -282,8 +293,8 @@ function chartSpec(d) {
 
   if (d.kind === "pie" || d.kind === "donut") {
     return { series: [{ type: "pie", radius: ["48%", "74%"],
-      itemStyle: { borderColor: "rgba(10,26,51,.85)", borderWidth: 3 },
-      label: { color: "#E6F0FF", fontSize: 16 },
+      itemStyle: { borderColor: "rgba(11,14,20,.85)", borderWidth: 3 },
+      label: { color: "#F3EEE4", fontSize: 16 },
       data: s.map((x) => ({ name: x.label, value: Number(x.value) || 0 })) }] };
   }
   if (d.kind === "line" || d.kind === "area") {
@@ -291,15 +302,15 @@ function chartSpec(d) {
       xAxis: { type: "category", boundaryGap: false, data: labels, ...AX },
       yAxis: { type: "value", ...AX },
       series: [{ type: "line", data: vals, smooth: true, symbolSize: 10,
-        lineStyle: { width: 5, color: "#6FA8FF" },
-        itemStyle: { color: "#6FA8FF" },
-        areaStyle: { color: "rgba(111,168,255,.20)" } }] };
+        lineStyle: { width: 5, color: "#E8A23A" },
+        itemStyle: { color: "#E8A23A" },
+        areaStyle: { color: "rgba(232,162,58,.20)" } }] };
   }
   return { grid,
     xAxis: { type: "value", ...AX },
     yAxis: { type: "category", data: labels.slice().reverse(), ...AX },
     series: [{ type: "bar", data: vals.slice().reverse(), barWidth: "56%",
-      itemStyle: { borderRadius: [0, 8, 8, 0], color: "#6FA8FF" } }] };
+      itemStyle: { borderRadius: [0, 8, 8, 0], color: "#E8A23A" } }] };
 }
 
 function hydrate(root, type) {
@@ -356,6 +367,117 @@ function setStatus(p) {
   if (p.transcript !== undefined) el.caption.textContent = p.transcript || "";
 }
 
+/* ---------- idle coaching ----------
+ * The projector used to show four mute dots for every failure mode. The card
+ * names the actual state and the one next action. Hidden the moment a scene
+ * is on stage — the room should never read setup copy. */
+
+function healthFail(h) {
+  if (!h) return null;
+  const ear = h.ear || {};
+  if (ear.state === "dead")
+    return { title: "Whisper did not load",
+             body: ear.error || "Run python backend/main.py --check" };
+  const brain = h.brain || {};
+  if (brain.error)
+    return { title: "Gemini cannot draw", body: brain.error };
+  return null;
+}
+
+function setCoach(card) {
+  if (!el.coach) return;
+  el.kicker.textContent = card.kicker || "";
+  el.title.textContent = card.title || "";
+  el.body.textContent = card.body || "";
+  el.body.classList.toggle("code", !!card.code);
+  if (el.rule) el.rule.hidden = !card.listening;
+  el.coach.classList.toggle("on-air", !!card.listening);
+  el.actions.innerHTML = (card.actions || []).map((a) =>
+    `<button type="button" class="coach-btn${a.primary ? " primary" : ""}" data-act="${esc(a.id)}">${esc(a.label)}</button>`
+  ).join("");
+}
+
+function renderCoach() {
+  if (!el.idle) return;
+  if (live.size > 0) {
+    el.idle.classList.add("gone");
+    return;
+  }
+  el.idle.classList.remove("gone");
+
+  if (mode === "demo") {
+    setCoach({
+      kicker: "Demo",
+      title: "Watching a recorded talk",
+      body: "This is a replay. Nothing you say is heard.",
+      actions: [{ id: "go-live", label: "Go live" }],
+    });
+    return;
+  }
+
+  if (!coach.connected) {
+    setCoach({
+      kicker: "Setup",
+      title: "Backend is not running",
+      body: "python -u backend/main.py",
+      code: true,
+      actions: [{ id: "play-demo", label: "Play the demo" }],
+    });
+    return;
+  }
+
+  const fail = healthFail(coach.health);
+  if (fail) {
+    setCoach({
+      kicker: "Not ready",
+      title: fail.title,
+      body: fail.body,
+      actions: [],
+    });
+    return;
+  }
+
+  if (!coach.listening) {
+    setCoach({
+      kicker: "Ready",
+      title: "Press Start, then talk",
+      body: "Stop halts transcription and every API call.",
+      actions: [{ id: "do-start", label: "Start", primary: true }],
+    });
+    return;
+  }
+
+  setCoach({
+    kicker: "On air",
+    title: "Listening.",
+    body: "Name a real thing, a number, or two places.",
+    listening: true,
+    actions: [],
+  });
+}
+
+function setListening(on) {
+  coach.listening = !!on;
+  renderCoach();
+}
+
+function onHealth(p) {
+  coach.health = p;
+  if (p.listening !== undefined) coach.listening = !!p.listening;
+  renderCoach();
+}
+
+if (el.actions) {
+  el.actions.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-act]");
+    if (!b) return;
+    const act = b.dataset.act;
+    if (act === "go-live") setMode("live");
+    else if (act === "play-demo") setMode("demo");
+    else if (act === "do-start") document.getElementById("listen-btn")?.click();
+  });
+}
+
 /* ---------- ops ---------- */
 
 const OPS = {
@@ -369,8 +491,12 @@ const OPS = {
   "link.add": () => {},               /* no edges in a scene model */
   "link.remove": () => {},
   "status": setStatus,
+  "health.state": onHealth,
   /* mic state is chrome, never a scene — the dock owns it */
-  "mics.state": (p) => window.CoDock && window.CoDock.onMics(p),
+  "mics.state": (p) => {
+    if (p.listening !== undefined) setListening(p.listening);
+    if (window.CoDock) window.CoDock.onMics(p);
+  },
   /* the running record — chrome, never a scene */
   "notes.state": (p) => window.CoDock && window.CoDock.onNotes(p),
 };
@@ -398,9 +524,14 @@ function closeWs() {
 
 function connect() {
   closeWs();
+  coach.connected = false;
+  coach.health = null;
+  renderCoach();
   ws = new WebSocket(WS_URL);
   ws.onopen = () => {
+    coach.connected = true;
     setStatus({ state: "listening" });
+    renderCoach();
     /* The stage owns how many scenes fit and how long one lives; the backend has
        to mirror it or the manifest it hands the model claims things are on screen
        that the room can no longer see. Announce it instead of asking the next
@@ -412,8 +543,12 @@ function connect() {
   };
   ws.onmessage = (e) => { try { handle(JSON.parse(e.data)); } catch (err) {} };
   ws.onclose = () => {
+    coach.connected = false;
+    coach.health = null;
+    document.body.classList.remove("stopped");
+    renderCoach();
     if (mode !== "live") return;
-    setStatus({ state: "error", transcript: "reconnecting…" });
+    setStatus({ state: "error", transcript: "" });
     setTimeout(() => mode === "live" && connect(), 1200);
   };
   ws.onerror = () => ws && ws.close();
@@ -449,8 +584,13 @@ function setMode(next) {
      transcript on screen after switching to Live is a straight lie about
      what the model just heard. */
   setStatus({ state: mode === "demo" ? "idle" : "listening", transcript: "" });
-  if (mode === "demo") { closeWs(); runDemo(); }
-  else connect();
+  if (mode === "demo") {
+    closeWs();
+    coach.connected = false;
+    coach.health = null;
+    renderCoach();
+    runDemo();
+  } else connect();
   document.querySelectorAll("#src-toggle button").forEach((b) =>
     b.classList.toggle("on", b.dataset.mode === mode));
   try { localStorage.setItem("copresenter-mode", mode); } catch (e) { /* private */ }
@@ -461,6 +601,7 @@ if (!Q.get("mode")) {
   try { mode = localStorage.getItem("copresenter-mode") || "live"; }
   catch (e) { /* private mode */ }
 }
+renderCoach();
 
 addEventListener("DOMContentLoaded", () => {
   const t = document.getElementById("src-toggle");
@@ -493,4 +634,5 @@ addEventListener("keydown", (e) => {
      would toggle twice and cancel out. */
 });
 
-window.CoStage = { addScene, updateScene, retire, clearAll, focusScene, live };
+window.CoStage = { addScene, updateScene, retire, clearAll, focusScene, live,
+                   setMode, setListening, renderCoach };

@@ -45,6 +45,8 @@ const dock = {
   help:   document.getElementById("help"),
   helpBtn: document.getElementById("help-btn"),
   helpClose: document.getElementById("help-close"),
+  moreBtn: document.getElementById("more-btn"),
+  more:   document.getElementById("more"),
 };
 
 let spkState = { active: false, device: null, devices: [] };
@@ -62,7 +64,9 @@ let hideTimer, stirTimer;
    on the canvas and nothing happens. Anything the presenter is actively using
    keeps it up. */
 function dockInUse() {
-  return !!document.querySelector(".picker.on") || dock.root.matches(":hover");
+  return !!document.querySelector(".picker.on")
+    || (dock.more && dock.more.classList.contains("on"))
+    || dock.root.matches(":hover");
 }
 
 function poke() {
@@ -139,6 +143,8 @@ function renderListen(on) {
     ? "Stop — halts transcription and every API call (L)"
     : "Start listening again (L)";
   document.body.classList.toggle("stopped", !listening);
+  if (window.CoStage && window.CoStage.setListening)
+    window.CoStage.setListening(listening);
 }
 
 /* The PA. The label carries the live buffer depth because that IS the latency you
@@ -381,10 +387,37 @@ addEventListener("keydown", (e) => {
 });
 /* Controls panel. Every shortcut here has a real button too — the keys are a
    shortcut, never the only way in. */
+function toggleMore(on) {
+  if (!dock.more) return;
+  const show = on === undefined ? dock.more.hidden : !!on;
+  dock.more.hidden = !show;
+  dock.more.classList.toggle("on", show);
+  if (dock.moreBtn) dock.moreBtn.classList.toggle("on", show);
+  poke();
+}
+
+if (dock.moreBtn) dock.moreBtn.onclick = (e) => {
+  e.stopPropagation();
+  toggleMore();
+};
+if (dock.more) {
+  dock.more.addEventListener("click", (e) => {
+    if (e.target.closest("button")) toggleMore(false);
+  });
+}
+addEventListener("pointerdown", (e) => {
+  if (!dock.more || dock.more.hidden) return;
+  if (e.target.closest("#more") || e.target.closest("#more-btn")) return;
+  toggleMore(false);
+});
+
 function toggleHelp(on) {
   if (!dock.help) return;
   dock.help.classList.toggle("on", on === undefined
     ? !dock.help.classList.contains("on") : on);
+  if (dock.help.classList.contains("on")) {
+    try { localStorage.setItem("copresenter-seen-help", "1"); } catch (e) { /* private */ }
+  }
   poke();
 }
 if (dock.helpBtn) dock.helpBtn.onclick = () => toggleHelp();
@@ -393,6 +426,9 @@ addEventListener("keydown", (e) => {
   if (e.key === "?" || (e.key === "/" && e.shiftKey)) toggleHelp();
   if (e.key === "Escape") toggleHelp(false);
 });
+try {
+  if (!localStorage.getItem("copresenter-seen-help")) toggleHelp(true);
+} catch (e) { /* private mode — skip the first-visit card */ }
 window.CoDock = { onMics, onNotes, renderListen, renderSpeaker, toggleHelp };
 dock.clear.onclick = () => { window.CoStage.clearAll(); window.sendPresenter("clear"); };
 
@@ -445,6 +481,7 @@ function syncFullIcon() {
    cannot show a button to un-hide itself. */
 function setClean(on) {
   document.body.classList.toggle("clean", on);
+  if (on) toggleMore(false);
   if (dock.hide) {
     dock.hide.querySelector(".msym").textContent = on ? "visibility" : "visibility_off";
     dock.hide.classList.toggle("on", on);
